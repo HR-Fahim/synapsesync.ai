@@ -1,22 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DocFile, FileVersion, ChatMessage } from '../types';
-import { ArrowLeft, Clock, Save, RefreshCcw, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType } from 'lucide-react';
+import { DocFile, FileVersion, ChatMessage, User } from '../types';
+import { ArrowLeft, Clock, Save, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType, Lock, ToggleLeft, ToggleRight, BrainCircuit, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from './Button';
 import { generateChatResponse } from '../services/geminiService';
 
 interface FileViewerProps {
   file: DocFile;
+  user: User;
   onBack: () => void;
   onRestore: (fileId: string, versionId: string) => void;
-  onUpdateFile: (fileId: string, newContent: string) => void;
+  onUpdateFile: (fileId: string, newContent: string, isAutoSave: boolean) => void;
+  onToggleAutoUpdate: (fileId: string) => void;
 }
 
-export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore, onUpdateFile }) => {
+export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRestore, onUpdateFile, onToggleAutoUpdate }) => {
   const [activeVersionId, setActiveVersionId] = useState<string>(file.currentVersionId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
+  const [isAiMinimized, setIsAiMinimized] = useState(false);
   
   // Editing State
   const [isEditing, setIsEditing] = useState(false);
@@ -25,11 +28,19 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Determine which content to show
-  // If activeVersionId is null or matches current, show current.
-  // Otherwise show the historical version.
   const activeVersion = file.versions.find(v => v.id === activeVersionId);
   const displayContent = activeVersion ? activeVersion.content : file.currentContent;
   const isHistoricalView = activeVersionId !== file.currentVersionId;
+
+  // Permission Logic
+  const getMaxEdits = (tier: string) => {
+    if (tier === 'FREE') return 5;
+    if (tier === 'PRO') return 15;
+    return Infinity;
+  };
+  const maxEdits = getMaxEdits(user.tier);
+  const canEdit = user.editsUsed < maxEdits;
+  const editLimitReached = user.editsUsed >= maxEdits;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,9 +48,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isAiMinimized]);
 
-  // Reset active version and editing state when file changes or version changes
   useEffect(() => {
     setActiveVersionId(file.currentVersionId);
     setIsEditing(false);
@@ -51,7 +61,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
     }]);
   }, [file]);
 
-  // If user switches version, exit edit mode
   useEffect(() => {
     setIsEditing(false);
   }, [activeVersionId]);
@@ -71,9 +80,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
     setInput('');
     setIsChatLoading(true);
 
-    // Prepare history for API
     const history = messages.map(m => ({ role: m.role, text: m.text }));
-
     const responseText = await generateChatResponse(history, displayContent, userMsg.text);
 
     const botMsg: ChatMessage = {
@@ -87,19 +94,15 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
     setIsChatLoading(false);
   };
 
-  const handleSimulateUpdate = () => {
-    // Simulates an external update to the Google Doc
-    const newContent = displayContent + `\n\n[Updated at ${new Date().toLocaleTimeString()}] New paragraph added by collaborator.`;
-    onUpdateFile(file.id, newContent);
-  };
-
   const handleStartEdit = () => {
+    if (!canEdit) return;
     setEditedContent(displayContent);
     setIsEditing(true);
   };
 
   const handleSaveEdit = () => {
-    onUpdateFile(file.id, editedContent);
+    // Manual Save
+    onUpdateFile(file.id, editedContent, false);
     setIsEditing(false);
   };
 
@@ -113,40 +116,38 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
 
   const getFileColor = () => {
     switch (file.type) {
-      case 'sheet': return 'bg-green-100 text-green-700';
-      case 'text': return 'bg-slate-100 text-slate-700';
-      default: return 'bg-blue-100 text-blue-700';
+      case 'sheet': return 'bg-green-900/30 text-green-400 border border-green-800/50';
+      case 'text': return 'bg-slate-800/50 text-slate-400 border border-slate-700/50';
+      default: return 'bg-blue-900/30 text-blue-400 border border-blue-800/50';
     }
   };
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col md:flex-row overflow-hidden bg-white">
-      {/* Main Content Area */}
+    <div className="h-[calc(100vh-64px)] flex flex-col md:flex-row overflow-hidden bg-slate-950">
       <div className="flex-1 flex flex-col h-full min-w-0">
-        {/* Header */}
-        <div className="h-16 border-b border-slate-200 px-4 flex items-center justify-between bg-white shrink-0">
+        <div className="h-16 border-b border-white/10 px-4 flex items-center justify-between bg-slate-900/50 shrink-0 backdrop-blur-sm">
           <div className="flex items-center gap-3 overflow-hidden">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+            <button onClick={onBack} className="p-2 hover:bg-white/5 rounded-full text-slate-400 transition-colors">
               <ArrowLeft size={20} />
             </button>
             <div className={`p-2 rounded-lg ${getFileColor()}`}>
               {getFileIcon()}
             </div>
             <div className="min-w-0">
-              <h2 className="font-semibold text-slate-900 truncate">{file.title}</h2>
-              <div className="text-xs text-slate-500 flex items-center gap-2">
+              <h2 className="font-semibold text-slate-100 truncate">{file.title}</h2>
+              <div className="text-xs text-slate-400 flex items-center gap-2">
                 {isHistoricalView ? (
-                  <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <span className="bg-amber-900/20 text-amber-500 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border border-amber-900/30">
                     <Clock size={12} /> History Mode
                   </span>
                 ) : (
-                  <span className="text-green-600 flex items-center gap-1">
-                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span className="text-green-500 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
                     Live Sync
                   </span>
                 )}
                 {isEditing && (
-                   <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                   <span className="bg-blue-900/20 text-blue-400 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border border-blue-900/30">
                      <Edit2 size={12} /> Editing
                    </span>
                 )}
@@ -157,14 +158,37 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
           <div className="flex items-center gap-2">
              {!isHistoricalView && !isEditing && (
                <>
-                 <Button variant="outline" size="sm" onClick={handleSimulateUpdate} title="Simulate an update from Google Docs" className="hidden sm:inline-flex">
-                   <RefreshCcw size={16} className="mr-2" />
-                   Simulate Update
-                 </Button>
-                 <Button variant="primary" size="sm" onClick={handleStartEdit}>
-                   <Edit2 size={16} className="mr-2" />
-                   Edit File
-                 </Button>
+                 {/* Auto-Update Toggle */}
+                 <div className="hidden sm:flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-white/5 mr-2">
+                    <BrainCircuit size={16} className={file.autoUpdateEnabled ? "text-purple-400" : "text-slate-500"} />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold leading-none mb-0.5">AI Updates</span>
+                      <button 
+                        onClick={() => onToggleAutoUpdate(file.id)}
+                        className={`text-xs font-semibold flex items-center gap-1 ${file.autoUpdateEnabled ? 'text-green-400' : 'text-slate-500'}`}
+                      >
+                         {file.autoUpdateEnabled ? 'Enabled' : 'Disabled'}
+                         {file.autoUpdateEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                      </button>
+                    </div>
+                 </div>
+
+                 {canEdit ? (
+                    <Button variant="primary" size="sm" onClick={handleStartEdit}>
+                      <Edit2 size={16} className="mr-2" />
+                      Edit File {user.tier !== 'PREMIUM' && <span className="ml-1 opacity-75 text-xs">({maxEdits - user.editsUsed} left)</span>}
+                    </Button>
+                 ) : (
+                    <div className="group relative">
+                      <Button variant="ghost" size="sm" disabled className="opacity-50 cursor-not-allowed">
+                         <Lock size={16} className="mr-2" />
+                         Edit Locked
+                      </Button>
+                      <div className="absolute top-full right-0 mt-2 w-48 p-2 bg-slate-800 text-slate-200 border border-slate-700 text-xs rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                        Edit available after 7 days
+                      </div>
+                    </div>
+                 )}
                </>
              )}
              
@@ -187,15 +211,14 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
           </div>
         </div>
 
-        {/* Content & Chat Split */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Document Preview / Editor */}
-          <div className="flex-1 bg-slate-50 overflow-y-auto p-8 border-r border-slate-200 custom-scrollbar">
-            <div className={`max-w-3xl mx-auto bg-white shadow-sm border border-slate-200 min-h-[800px] rounded-sm ${isEditing ? 'p-0 overflow-hidden' : 'p-8 md:p-12'}`}>
+          <div className="flex-1 bg-slate-950 overflow-y-auto p-8 border-r border-white/5 custom-scrollbar">
+            {/* Lighter Document Container */}
+            <div className={`max-w-3xl mx-auto bg-white shadow-2xl border border-white/5 min-h-[800px] rounded-sm text-slate-900 ${isEditing ? 'p-0 overflow-hidden ring-2 ring-blue-500/50' : 'p-8 md:p-12'}`}>
               
               {isEditing ? (
                 <textarea 
-                  className="w-full h-full min-h-[800px] p-8 md:p-12 resize-none focus:outline-none font-serif text-slate-800 leading-relaxed text-base"
+                  className="w-full h-full min-h-[800px] p-8 md:p-12 resize-none focus:outline-none font-serif text-slate-900 leading-relaxed text-base bg-white"
                   value={editedContent}
                   onChange={(e) => setEditedContent(e.target.value)}
                   placeholder="Start typing..."
@@ -205,16 +228,15 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
                 <>
                   {file.type === 'sheet' ? (
                     <div className="grid grid-cols-4 gap-0 border-t border-l border-slate-300">
-                      {/* Mock Sheet UI */}
                       {[...Array(20)].map((_, i) => (
-                        <div key={i} className="border-b border-r border-slate-300 p-2 text-sm h-10 truncate bg-white">
-                            {i < 4 ? <span className="font-bold bg-slate-50 block -m-2 p-2">{['A','B','C','D'][i]}</span> : 
+                        <div key={i} className="border-b border-r border-slate-300 p-2 text-sm h-10 truncate bg-white text-slate-900">
+                            {i < 4 ? <span className="font-bold bg-slate-50 block -m-2 p-2 text-slate-600">{['A','B','C','D'][i]}</span> : 
                             (displayContent.split('\n')[i] || '')}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="prose prose-slate max-w-none whitespace-pre-wrap font-serif text-slate-800 leading-relaxed">
+                    <div className="prose prose-slate max-w-none whitespace-pre-wrap font-serif text-slate-900 leading-relaxed">
                       {displayContent}
                     </div>
                   )}
@@ -223,106 +245,124 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
             </div>
           </div>
 
-          {/* Chat Interface */}
-          <div className="w-96 bg-white flex flex-col border-l border-slate-200 shadow-[rgba(0,0,0,0.05)_0px_0px_20px]">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-              <Sparkles className="text-purple-600 w-5 h-5" />
-              <h3 className="font-medium text-slate-900">AI Assistant</h3>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-                    msg.role === 'user' 
-                      ? 'bg-blue-600 text-white rounded-tr-none' 
-                      : 'bg-slate-100 text-slate-800 rounded-tl-none'
-                  }`}>
-                    {msg.role === 'model' && <Bot size={16} className="mb-1 text-purple-600 inline-block mr-2" />}
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              {isChatLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-slate-100 rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-2">
-                     <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
-                     <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100"></span>
-                     <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200"></span>
-                  </div>
+          {/* Minimizable AI Chat */}
+          <div className={`${isAiMinimized ? 'w-14' : 'w-96'} bg-slate-900 flex flex-col border-l border-white/5 shadow-xl transition-all duration-300`}>
+            <div className={`p-4 border-b border-white/5 bg-slate-900/50 flex items-center ${isAiMinimized ? 'justify-center' : 'justify-between'}`}>
+              {!isAiMinimized && (
+                <div className="flex items-center gap-2">
+                  <Sparkles className="text-purple-500 w-5 h-5" />
+                  <h3 className="font-medium text-slate-200">AI Assistant</h3>
                 </div>
               )}
-              <div ref={messagesEndRef} />
+              {isAiMinimized && <Sparkles className="text-purple-500 w-5 h-5 cursor-pointer" onClick={() => setIsAiMinimized(false)} />}
+              
+              <button onClick={() => setIsAiMinimized(!isAiMinimized)} className="text-slate-500 hover:text-white transition-colors">
+                {isAiMinimized ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+              </button>
             </div>
+            
+            {!isAiMinimized && (
+              <>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {messages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                        msg.role === 'user' 
+                          ? 'bg-blue-600 text-white rounded-tr-none shadow-md shadow-blue-900/20' 
+                          : 'bg-slate-800 text-slate-300 rounded-tl-none border border-white/5'
+                      }`}>
+                        {msg.role === 'model' && <Bot size={16} className="mb-1 text-purple-400 inline-block mr-2" />}
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-2 border border-white/5">
+                         <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></span>
+                         <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-100"></span>
+                         <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-200"></span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
 
-            <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-200 bg-white">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about this file..."
-                  className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
-                  disabled={isChatLoading}
-                />
-                <button 
-                  type="submit"
-                  disabled={!input.trim() || isChatLoading}
-                  className="absolute right-2 top-2 p-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:hover:bg-purple-600 transition-colors"
-                >
-                  <Send size={16} />
-                </button>
-              </div>
-            </form>
+                <form onSubmit={handleSendMessage} className="p-4 border-t border-white/5 bg-slate-900">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Ask about this file..."
+                      className="w-full pl-4 pr-12 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-slate-950 transition-all text-sm text-white placeholder:text-slate-600"
+                      disabled={isChatLoading}
+                    />
+                    <button 
+                      type="submit"
+                      disabled={!input.trim() || isChatLoading}
+                      className="absolute right-2 top-2 p-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 disabled:hover:bg-purple-600 transition-colors"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+            
+            {isAiMinimized && (
+               <div className="flex-1 flex flex-col items-center py-4 gap-4">
+                 <button onClick={() => setIsAiMinimized(false)} className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                   <Bot size={16} />
+                 </button>
+               </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* History Sidebar */}
       {showHistory && (
-        <div className="w-80 bg-slate-50 border-l border-slate-200 flex flex-col shrink-0 h-full absolute md:relative z-20 right-0 shadow-xl md:shadow-none transition-transform duration-300">
-          <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between">
+        <div className="w-80 bg-slate-900 border-l border-white/5 flex flex-col shrink-0 h-full absolute md:relative z-20 right-0 shadow-2xl md:shadow-none transition-transform duration-300">
+          <div className="p-4 border-b border-white/5 bg-slate-900 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="text-slate-500" size={18} />
-              <h3 className="font-semibold text-slate-900">Version History</h3>
+              <h3 className="font-semibold text-slate-200">Version History</h3>
             </div>
-            <div className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
+            <div className="bg-blue-900/30 text-blue-400 text-xs font-bold px-2 py-1 rounded-full border border-blue-800/30">
               {file.versions.length} Updates
             </div>
           </div>
           
           <div className="flex-1 overflow-y-auto p-2">
             <div className="space-y-2">
-               {/* Current Version Item */}
                <div 
                   onClick={() => setActiveVersionId(file.currentVersionId)}
                   className={`p-3 rounded-lg border cursor-pointer transition-all ${
                     activeVersionId === file.currentVersionId 
-                      ? 'bg-blue-50 border-blue-400 shadow-sm ring-1 ring-blue-100' 
-                      : 'bg-white border-slate-200 hover:border-blue-300'
+                      ? 'bg-blue-900/20 border-blue-500/50 shadow-sm shadow-blue-900/20' 
+                      : 'bg-slate-800/40 border-white/5 hover:border-blue-500/30 hover:bg-slate-800'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-sm font-medium text-slate-900">Current Version</span>
-                    <span className="text-xs text-slate-400">Now</span>
+                    <span className="text-sm font-medium text-slate-200">Current Version</span>
+                    <span className="text-xs text-slate-500">Now</span>
                   </div>
-                  <p className="text-xs text-slate-500 truncate">Latest synchronized content</p>
+                  <p className="text-xs text-slate-400 truncate">Latest synchronized content</p>
                </div>
 
-              {/* History Items */}
               {file.versions.slice().reverse().map((version) => (
                 <div 
                   key={version.id}
                   onClick={() => setActiveVersionId(version.id)}
                   className={`p-3 rounded-lg border cursor-pointer transition-all group ${
                     activeVersionId === version.id 
-                      ? 'bg-amber-50 border-amber-400 shadow-sm ring-1 ring-amber-100' 
-                      : 'bg-white border-slate-200 hover:border-amber-200'
+                      ? 'bg-amber-900/20 border-amber-500/50 shadow-sm shadow-amber-900/20' 
+                      : 'bg-slate-800/40 border-white/5 hover:border-amber-500/30 hover:bg-slate-800'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-sm font-medium text-slate-900">{version.versionLabel}</span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-sm font-medium text-slate-200">{version.versionLabel}</span>
+                    <span className="text-xs text-slate-500">
                       {new Date(version.timestamp).toLocaleDateString()}
                     </span>
                   </div>
@@ -330,14 +370,13 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, onBack, onRestore,
                     {new Date(version.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </p>
                   
-                  {/* Restore Button - Distinctly visible when selected, otherwise on hover */}
                   <div className={`flex justify-end transition-opacity duration-200 ${activeVersionId === version.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onRestore(file.id, version.id);
                       }}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-md shadow-sm transition-colors"
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-md shadow-sm transition-colors"
                       title="Restore this version"
                     >
                       <Undo size={12} />

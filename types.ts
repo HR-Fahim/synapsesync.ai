@@ -1,7 +1,13 @@
+export type SubscriptionTier = 'FREE' | 'PRO' | 'PREMIUM';
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  tier: SubscriptionTier;
+  editsUsed: number;
+  lastEditReset: string; // ISO String for tracking weekly reset
+  autoUpdateInterval: number; // Days
 }
 
 export interface FileVersion {
@@ -20,6 +26,7 @@ export interface DocFile {
   versions: FileVersion[];
   ownerId: string;
   currentVersionId: string;
+  autoUpdateEnabled: boolean;
 }
 
 export interface ChatMessage {
@@ -34,5 +41,6 @@ export enum ViewState {
   DASHBOARD = 'DASHBOARD',
   FILE_DETAIL = 'FILE_DETAIL',
   GOOGLE_SIGNIN = 'GOOGLE_SIGNIN',
-  FILE_PICKER = 'FILE_PICKER'
+  FILE_PICKER = 'FILE_PICKER',
+  SUBSCRIPTION = 'SUBSCRIPTION'
 }
