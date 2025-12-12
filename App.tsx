@@ -300,18 +300,17 @@ function App() {
     e.preventDefault(); // Prevent standard button behavior
     e.stopPropagation(); // Stop bubbling to the card container
     
-    if (window.confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
-      setFiles(prevFiles => {
-        const updatedFiles = prevFiles.filter(f => f.id !== fileId);
-        return updatedFiles;
-      });
-      
-      if (selectedFileId === fileId) {
-        setSelectedFileId(null);
-        setView(ViewState.DASHBOARD);
-      }
-      showNotification('File deleted successfully.');
+    // Immediate deletion without confirmation as requested
+    setFiles(prevFiles => {
+      const updatedFiles = prevFiles.filter(f => f.id !== fileId);
+      return updatedFiles;
+    });
+    
+    if (selectedFileId === fileId) {
+      setSelectedFileId(null);
+      setView(ViewState.DASHBOARD);
     }
+    showNotification('File deleted successfully.');
   };
 
   const handleBackToDashboard = () => {
@@ -339,9 +338,10 @@ function App() {
           versionLabel: versionLabel
         };
 
+        // Added email notification simulation message
         const msg = isAutoSave 
-          ? `File "${file.title}" auto-updated.` 
-          : `File "${file.title}" saved successfully.`;
+          ? `File "${file.title}" auto-updated. Email notification sent.` 
+          : `File "${file.title}" saved successfully. Email notification sent.`;
         
         showNotification(msg);
         
@@ -633,56 +633,79 @@ function App() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {files.map(file => (
-              <div 
-                key={file.id}
-                onClick={() => handleSelectFile(file.id)}
-                className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 hover:shadow-xl hover:border-blue-500/50 transition-all cursor-pointer group overflow-hidden"
-              >
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`p-3 rounded-lg ${getFileColor(file.type)}`}>
-                      {getFileIcon(file.type)}
+          {files.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 px-4 text-center rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30">
+              <div className="bg-slate-800/50 p-6 rounded-full mb-6 ring-1 ring-white/10">
+                <Upload size={48} className="text-slate-500" strokeWidth={1.5} />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">No files found</h3>
+              <p className="text-slate-400 max-w-md mb-8 text-lg">
+                Upload your documents or connect Google Drive to start analyzing them with AI.
+              </p>
+              <div className="flex gap-4">
+                 <Button onClick={handleUploadClick} size="lg">
+                    <Upload size={20} className="mr-2" />
+                    Upload File
+                 </Button>
+                 <Button onClick={handleStartConnectDrive} variant="outline" size="lg">
+                    <Plus size={20} className="mr-2" />
+                    Connect Drive
+                 </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {files.map(file => (
+                <div 
+                  key={file.id}
+                  onClick={() => handleSelectFile(file.id)}
+                  className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 hover:shadow-xl hover:border-blue-500/50 transition-all cursor-pointer group overflow-hidden"
+                >
+                  <div className="p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-3 rounded-lg ${getFileColor(file.type)}`}>
+                        {getFileIcon(file.type)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {file.versions.length > 0 && (
+                           <span className="bg-slate-800 text-slate-400 text-xs font-medium px-2 py-1 rounded-full border border-slate-700">
+                             {file.versions.length} versions
+                           </span>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={(e) => handleDeleteFile(e, file.id)}
+                          className="relative z-10 p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                          title="Delete file"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {file.versions.length > 0 && (
-                         <span className="bg-slate-800 text-slate-400 text-xs font-medium px-2 py-1 rounded-full border border-slate-700">
-                           {file.versions.length} versions
+                    <h3 className="font-semibold text-lg text-slate-200 mb-1 group-hover:text-blue-400 transition-colors truncate">
+                      {file.title}
+                    </h3>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-sm text-slate-500">
+                        Updated {new Date(file.lastUpdated).toLocaleDateString()}
+                      </p>
+                      {file.autoUpdateEnabled && (
+                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-400 bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/30">
+                           <RefreshCw size={10} className="animate-spin-slow" /> AUTO
                          </span>
                       )}
-                      <button 
-                        onClick={(e) => handleDeleteFile(e, file.id)}
-                        className="relative z-10 p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                        title="Delete file"
-                      >
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                   </div>
-                  <h3 className="font-semibold text-lg text-slate-200 mb-1 group-hover:text-blue-400 transition-colors truncate">
-                    {file.title}
-                  </h3>
-                  <div className="flex items-center justify-between mt-2">
-                    <p className="text-sm text-slate-500">
-                      Updated {new Date(file.lastUpdated).toLocaleDateString()}
-                    </p>
-                    {file.autoUpdateEnabled && (
-                       <span className="flex items-center gap-1 text-[10px] font-bold text-green-400 bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/30">
-                         <RefreshCw size={10} className="animate-spin-slow" /> AUTO
-                       </span>
-                    )}
+                  <div className="bg-slate-950/50 px-5 py-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+                    <span className="flex items-center gap-1">
+                       <Lock size={12} /> Private
+                    </span>
+                    <span>Owner: {user.name}</span>
                   </div>
                 </div>
-                <div className="bg-slate-950/50 px-5 py-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-                  <span className="flex items-center gap-1">
-                     <Lock size={12} /> Private
-                  </span>
-                  <span>Owner: {user.name}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </main>
       )}
 
