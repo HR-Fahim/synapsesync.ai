@@ -7,7 +7,16 @@ import { GoogleAuth } from './components/GoogleAuth';
 import { FilePicker } from './components/FilePicker';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { User, DocFile, ViewState, FileVersion, SubscriptionTier } from './types';
-import { FileText, FileSpreadsheet, Plus, Lock, Mail, Search, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, MousePointerClick } from 'lucide-react';
+import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck } from 'lucide-react';
+import { auth } from './services/firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  updateProfile,
+  sendPasswordResetEmail
+} from 'firebase/auth';
 
 // Mock Initial Data
 const MOCK_FILES: DocFile[] = [
@@ -44,15 +53,12 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
   
   // Auth Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [name, setName] = useState('');
-
-  // Verification State
-  const [isVerifying, setIsVerifying] = useState(false);
 
   // App Data State
   const [files, setFiles] = useState<DocFile[]>(MOCK_FILES);
@@ -62,6 +68,33 @@ function App() {
 
   // File Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Monitor Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // Map Firebase user to App User
+        // In a real app, we would fetch the extended profile (tier, stats) from Firestore
+        // For this demo, we initialize with default values if not already present
+        setUser(prevUser => ({
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          email: firebaseUser.email || '',
+          tier: prevUser?.tier || 'FREE', 
+          editsUsed: prevUser?.editsUsed || 0,
+          lastEditReset: prevUser?.lastEditReset || new Date().toISOString(),
+          autoUpdateInterval: prevUser?.autoUpdateInterval || 14
+        }));
+        if (view === ViewState.AUTH) {
+          setView(ViewState.DASHBOARD);
+        }
+      } else {
+        setUser(null);
+        setView(ViewState.AUTH);
+      }
+    });
+    return () => unsubscribe();
+  }, [view]);
 
   // Check and Reset Weekly Edits
   useEffect(() => {
@@ -85,7 +118,7 @@ function App() {
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   // Authentication Handlers
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isValidEmail(email)) {
@@ -98,38 +131,45 @@ function App() {
       return;
     }
 
-    if (isRegistering) {
-      if (!name) return;
-      
-      if (password !== confirmPassword) {
-        showNotification("Passwords do not match.");
-        return;
-      }
+    setIsAuthLoading(true);
 
-      // Start Verification Process (Link Mode)
-      setIsVerifying(true);
-      // Simulate sending email
-      console.log(`Confirmation link sent to ${email}`);
-      showNotification(`Confirmation link sent to ${email}`);
-      
-    } else {
-      // Login logic (mock)
-      const mockUser: User = { 
-        id: 'u1', 
-        name: 'Demo User', 
-        email, 
-        tier: 'FREE', 
-        editsUsed: 0,
-        lastEditReset: new Date().toISOString(),
-        autoUpdateInterval: 14 
-      };
-      setUser(mockUser);
-      setView(ViewState.DASHBOARD);
-      showNotification('Signed in successfully.');
+    try {
+      if (isRegistering) {
+        if (password !== confirmPassword) {
+          showNotification("Passwords do not match.");
+          setIsAuthLoading(false);
+          return;
+        }
+
+        // Firebase Sign Up
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const name = email.split('@')[0];
+        await updateProfile(userCredential.user, {
+          displayName: name
+        });
+        
+        showNotification('Account created successfully!');
+        
+      } else {
+        // Firebase Login
+        await signInWithEmailAndPassword(auth, email, password);
+        showNotification('Signed in successfully.');
+      }
+      // View transition handled by onAuthStateChanged
+    } catch (error: any) {
+      console.error(error);
+      let msg = "Authentication failed.";
+      if (error.code === 'auth/email-already-in-use') msg = "That email is already in use.";
+      if (error.code === 'auth/invalid-credential') msg = "Invalid email or password.";
+      if (error.code === 'auth/user-not-found') msg = "No user found with this email.";
+      if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
+      showNotification(msg);
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
-  const handleForgotPassword = (e: React.MouseEvent) => {
+  const handleForgotPassword = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (!email) {
       showNotification("Please enter your email address to reset password.");
@@ -139,26 +179,28 @@ function App() {
       showNotification("Please enter a valid email address.");
       return;
     }
-    showNotification(`Password reset instructions sent to ${email}`);
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showNotification(`Password reset instructions sent to ${email}`);
+    } catch (error: any) {
+      showNotification("Failed to send reset email. Please check the address.");
+    }
   };
 
-  const handleResendLink = (e?: React.MouseEvent) => {
-    e?.preventDefault();
-    console.log(`Resent link to ${email}`);
-    showNotification(`New confirmation link sent to ${email}`);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    setView(ViewState.AUTH);
-    setSelectedFileId(null);
-    // Reset Auth State
-    setIsRegistering(false);
-    setIsVerifying(false);
-    setEmail('');
-    setPassword('');
-    setConfirmPassword('');
-    setName('');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // State reset handled by onAuthStateChanged
+      setSelectedFileId(null);
+      setIsRegistering(false);
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      showNotification('Logged out successfully.');
+    } catch (error) {
+      showNotification('Error logging out.');
+    }
   };
 
   const showNotification = (msg: string) => {
@@ -511,129 +553,94 @@ function App() {
                </div>
 
                <div className="bg-slate-900/80 p-8 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md">
-                   {isVerifying ? (
-                     // Verification View (Email Link Mode)
-                     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                       <div className="flex items-center gap-3 mb-8">
-                         <button 
-                           onClick={() => setIsVerifying(false)} 
-                           className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
-                         >
-                           <ArrowLeft size={20} />
-                         </button>
-                         <h2 className="text-xl font-bold text-white">Check Your Inbox</h2>
+                   {/* Auth View */}
+                   <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                     <h2 className="text-2xl font-bold text-white mb-2">
+                       {isRegistering ? 'Create an Account' : 'Welcome Back'}
+                     </h2>
+                     <p className="text-slate-400 mb-8">
+                         {isRegistering ? 'Start your journey with AI-powered docs.' : 'Sign in to access your workspace.'}
+                     </p>
+                     
+                     <form onSubmit={handleAuth} className="space-y-5">
+                       <div className="space-y-1">
+                         <Input 
+                           label="Email Address" 
+                           type="email" 
+                           placeholder="you@company.com" 
+                           value={email}
+                           onChange={e => setEmail(e.target.value)}
+                           required
+                           className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                           disabled={isAuthLoading}
+                         />
                        </div>
-                       
-                       <div className="text-center mb-8">
-                           <div className="w-16 h-16 bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
-                               <Mail className="text-blue-400 w-8 h-8" />
+                       <div className="space-y-1">
+                         <Input 
+                           label="Password" 
+                           type="password" 
+                           placeholder="••••••••" 
+                           value={password}
+                           onChange={e => setPassword(e.target.value)}
+                           required
+                           className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                           disabled={isAuthLoading}
+                         />
+                         {!isRegistering && (
+                           <div className="flex justify-end pt-1">
+                             <button 
+                               type="button"
+                               onClick={handleForgotPassword}
+                               className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                             >
+                               Forgot Password?
+                             </button>
                            </div>
-                           <p className="text-slate-300">
-                             We've sent a confirmation link to <br/><span className="text-white font-semibold">{email}</span>
-                           </p>
+                         )}
                        </div>
 
-                       <div className="space-y-4">
-                         <div className="mt-4 text-center">
-                           <button 
-                             onClick={handleResendLink}
-                             className="text-slate-500 hover:text-white transition-colors text-sm font-medium flex items-center justify-center gap-2 w-full py-2"
-                           >
-                             <RefreshCw size={14} />
-                             Resend Link
-                           </button>
-                         </div>
-                       </div>
-                     </div>
-                   ) : (
-                     // Auth View
-                     <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                       <h2 className="text-2xl font-bold text-white mb-2">
-                         {isRegistering ? 'Create an Account' : 'Welcome Back'}
-                       </h2>
-                       <p className="text-slate-400 mb-8">
-                           {isRegistering ? 'Start your journey with AI-powered docs.' : 'Sign in to access your workspace.'}
+                       {isRegistering && (
+                          <div className="space-y-1">
+                            <Input 
+                              label="Confirm Password" 
+                              type="password" 
+                              placeholder="••••••••" 
+                              value={confirmPassword}
+                              onChange={e => setConfirmPassword(e.target.value)}
+                              required
+                              className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                              disabled={isAuthLoading}
+                            />
+                          </div>
+                       )}
+                       
+                       <Button 
+                        type="submit" 
+                        isLoading={isAuthLoading}
+                        className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" 
+                        size="lg"
+                       >
+                         {isRegistering ? 'Sign Up' : 'Sign In'}
+                       </Button>
+                     </form>
+
+                     <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                       <p className="text-slate-500 text-sm mb-3">
+                          {isRegistering ? 'Already have an account?' : "Don't have an account?"}
                        </p>
-                       
-                       <form onSubmit={handleAuth} className="space-y-5">
-                         {isRegistering && (
-                           <div className="space-y-1">
-                               <Input 
-                                 label="Full Name" 
-                                 placeholder="John Doe" 
-                                 value={name}
-                                 onChange={e => setName(e.target.value)}
-                                 required 
-                                 className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                               />
-                           </div>
-                         )}
-                         <div className="space-y-1">
-                           <Input 
-                             label="Email Address" 
-                             type="email" 
-                             placeholder="you@company.com" 
-                             value={email}
-                             onChange={e => setEmail(e.target.value)}
-                             required
-                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                           />
-                         </div>
-                         <div className="space-y-1">
-                           <Input 
-                             label="Password" 
-                             type="password" 
-                             placeholder="••••••••" 
-                             value={password}
-                             onChange={e => setPassword(e.target.value)}
-                             required
-                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                           />
-                           {!isRegistering && (
-                             <div className="flex justify-end pt-1">
-                               <button 
-                                 type="button"
-                                 onClick={handleForgotPassword}
-                                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                               >
-                                 Forgot Password?
-                               </button>
-                             </div>
-                           )}
-                         </div>
-
-                         {isRegistering && (
-                            <div className="space-y-1">
-                              <Input 
-                                label="Confirm Password" 
-                                type="password" 
-                                placeholder="••••••••" 
-                                value={confirmPassword}
-                                onChange={e => setConfirmPassword(e.target.value)}
-                                required
-                                className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                              />
-                            </div>
-                         )}
-                         
-                         <Button type="submit" className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" size="lg">
-                           {isRegistering ? 'Sign Up' : 'Sign In'}
-                         </Button>
-                       </form>
-
-                       <div className="mt-8 pt-6 border-t border-white/5 text-center">
-                         <p className="text-slate-500 text-sm mb-3">
-                            {isRegistering ? 'Already have an account?' : "Don't have an account?"}
-                         </p>
-                         <button 
-                           onClick={() => setIsRegistering(!isRegistering)}
-                           className="text-white font-medium hover:text-blue-400 transition-colors border border-white/10 bg-white/5 px-6 py-2 rounded-lg hover:bg-white/10 w-full"
-                         >
-                           {isRegistering ? 'Sign In to Existing Account' : 'Create New Account'}
-                         </button>
-                       </div>
+                       <button 
+                         onClick={() => {
+                           setIsRegistering(!isRegistering);
+                           setNotification(null);
+                         }}
+                         className="text-white font-medium hover:text-blue-400 transition-colors border border-white/10 bg-white/5 px-6 py-2 rounded-lg hover:bg-white/10 w-full"
+                         title={isRegistering ? 'Switch to Sign In' : 'Switch to Sign Up'}
+                         disabled={isAuthLoading}
+                       >
+                         {isRegistering ? 'Sign In to Existing Account' : 'Create New Account'}
+                       </button>
                      </div>
-                   )}
+                   </div>
                </div>
             </div>
         </div>
