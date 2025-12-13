@@ -7,7 +7,7 @@ import { GoogleAuth } from './components/GoogleAuth';
 import { FilePicker } from './components/FilePicker';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { User, DocFile, ViewState, FileVersion, SubscriptionTier } from './types';
-import { FileText, FileSpreadsheet, Plus, Lock, Mail, Search, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft } from 'lucide-react';
+import { FileText, FileSpreadsheet, Plus, Lock, Mail, Search, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, MousePointerClick } from 'lucide-react';
 
 // Mock Initial Data
 const MOCK_FILES: DocFile[] = [
@@ -48,12 +48,11 @@ function App() {
   // Auth Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
 
   // Verification State
   const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [inputCode, setInputCode] = useState('');
 
   // App Data State
   const [files, setFiles] = useState<DocFile[]>(MOCK_FILES);
@@ -102,13 +101,16 @@ function App() {
     if (isRegistering) {
       if (!name) return;
       
-      // Start Verification Process
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      setVerificationCode(code);
+      if (password !== confirmPassword) {
+        showNotification("Passwords do not match.");
+        return;
+      }
+
+      // Start Verification Process (Link Mode)
       setIsVerifying(true);
       // Simulate sending email
-      console.log(`Email sent to ${email} with code: ${code}`);
-      showNotification(`Confirmation code sent to ${email}`);
+      console.log(`Confirmation link sent to ${email}`);
+      showNotification(`Confirmation link sent to ${email}`);
       
     } else {
       // Login logic (mock)
@@ -127,35 +129,23 @@ function App() {
     }
   };
 
-  const handleVerifyCode = (e: React.FormEvent) => {
+  const handleForgotPassword = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (inputCode === verificationCode) {
-      // Complete Registration
-      const newUser: User = { 
-        id: 'u1', 
-        name, 
-        email, 
-        tier: 'FREE', 
-        editsUsed: 0,
-        lastEditReset: new Date().toISOString(),
-        autoUpdateInterval: 14 
-      };
-      setUser(newUser);
-      setView(ViewState.DASHBOARD);
-      setIsVerifying(false);
-      setInputCode('');
-      setVerificationCode('');
-      showNotification(`Welcome, ${name}! Verification successful.`);
-    } else {
-      showNotification("Invalid code. Please try again.");
+    if (!email) {
+      showNotification("Please enter your email address to reset password.");
+      return;
     }
+    if (!isValidEmail(email)) {
+      showNotification("Please enter a valid email address.");
+      return;
+    }
+    showNotification(`Password reset instructions sent to ${email}`);
   };
 
-  const handleResendCode = () => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setVerificationCode(code);
-    console.log(`Resent code to ${email}: ${code}`);
-    showNotification(`New confirmation code sent to ${email}`);
+  const handleResendLink = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    console.log(`Resent link to ${email}`);
+    showNotification(`New confirmation link sent to ${email}`);
   };
 
   const handleLogout = () => {
@@ -167,8 +157,8 @@ function App() {
     setIsVerifying(false);
     setEmail('');
     setPassword('');
+    setConfirmPassword('');
     setName('');
-    setInputCode('');
   };
 
   const showNotification = (msg: string) => {
@@ -444,117 +434,208 @@ function App() {
 
   if (view === ViewState.AUTH) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 flex font-sans">
         {notification && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-4 border border-white/10">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-4 border border-white/10 flex items-center gap-2">
+            <Mail size={16} className="text-blue-400" />
             {notification}
           </div>
         )}
-        <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-white/10">
-          <div className="bg-slate-950 p-8 text-center relative overflow-hidden">
-             <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-purple-600/20"></div>
-            <div className="mx-auto w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mb-4 relative z-10 border border-white/10">
-              <BrainCircuit className="text-blue-400" size={24} />
+
+        {/* Left Side - Hero (Hidden on Mobile) */}
+        <div className="hidden lg:flex lg:w-1/2 bg-slate-900 relative overflow-hidden items-center justify-center p-12 border-r border-white/5">
+           {/* Animated Gradient Background */}
+           <div className="absolute inset-0 bg-slate-900">
+               <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] animate-pulse"></div>
+               <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[100px] animate-pulse delay-1000"></div>
+           </div>
+           
+           <div className="relative z-10 max-w-lg">
+               <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-8 shadow-2xl shadow-blue-900/30">
+                   <BrainCircuit className="text-white w-8 h-8" />
+               </div>
+               <h1 className="text-5xl font-bold text-white mb-6 leading-tight tracking-tight">
+                   SynapseSync<span className="text-blue-500">.AI</span>
+               </h1>
+               <p className="text-xl text-slate-400 mb-10 leading-relaxed">
+                   Elevate your documentation with intelligent AI analysis, seamless version control, and real-time collaboration tools.
+               </p>
+               
+               <div className="space-y-8">
+                   <div className="flex items-start gap-4 group">
+                       <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-blue-500/50 group-hover:bg-blue-900/20 transition-all">
+                           <Sparkles className="text-blue-400 w-6 h-6 group-hover:scale-110 transition-transform" />
+                       </div>
+                       <div>
+                           <h3 className="font-semibold text-white text-lg mb-1">AI-Powered Insights</h3>
+                           <p className="text-slate-400">Instantly chat with your documents to extract summaries, insights, and answers.</p>
+                       </div>
+                   </div>
+                   
+                   <div className="flex items-start gap-4 group">
+                        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-purple-500/50 group-hover:bg-purple-900/20 transition-all">
+                           <Clock className="text-purple-400 w-6 h-6 group-hover:scale-110 transition-transform" />
+                       </div>
+                       <div>
+                           <h3 className="font-semibold text-white text-lg mb-1">Time Travel</h3>
+                           <p className="text-slate-400">Automated version snapshots allow you to restore any point in history effortlessly.</p>
+                       </div>
+                   </div>
+
+                   <div className="flex items-start gap-4 group">
+                        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-green-500/50 group-hover:bg-green-900/20 transition-all">
+                           <ShieldCheck className="text-green-400 w-6 h-6 group-hover:scale-110 transition-transform" />
+                       </div>
+                       <div>
+                           <h3 className="font-semibold text-white text-lg mb-1">Secure & Private</h3>
+                           <p className="text-slate-400">Enterprise-grade security ensures your intellectual property remains protected.</p>
+                       </div>
+                   </div>
+               </div>
+           </div>
+        </div>
+
+        {/* Right Side - Auth Form */}
+        <div className="flex-1 flex items-center justify-center p-4 lg:p-12 relative overflow-hidden">
+            {/* Mobile Background decoration */}
+            <div className="absolute top-[-20%] right-[-20%] w-[300px] h-[300px] bg-blue-600/20 rounded-full blur-3xl lg:hidden"></div>
+            
+            <div className="w-full max-w-md z-10">
+               {/* Mobile Header */}
+               <div className="lg:hidden text-center mb-10">
+                   <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl mb-6 shadow-lg">
+                      <BrainCircuit className="text-white w-7 h-7" />
+                   </div>
+                   <h2 className="text-3xl font-bold text-white">SynapseSync.AI</h2>
+                   <p className="text-slate-400 mt-2">Intelligent Document Management</p>
+               </div>
+
+               <div className="bg-slate-900/80 p-8 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md">
+                   {isVerifying ? (
+                     // Verification View (Email Link Mode)
+                     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                       <div className="flex items-center gap-3 mb-8">
+                         <button 
+                           onClick={() => setIsVerifying(false)} 
+                           className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
+                         >
+                           <ArrowLeft size={20} />
+                         </button>
+                         <h2 className="text-xl font-bold text-white">Check Your Inbox</h2>
+                       </div>
+                       
+                       <div className="text-center mb-8">
+                           <div className="w-16 h-16 bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+                               <Mail className="text-blue-400 w-8 h-8" />
+                           </div>
+                           <p className="text-slate-300">
+                             We've sent a confirmation link to <br/><span className="text-white font-semibold">{email}</span>
+                           </p>
+                       </div>
+
+                       <div className="space-y-4">
+                         <div className="mt-4 text-center">
+                           <button 
+                             onClick={handleResendLink}
+                             className="text-slate-500 hover:text-white transition-colors text-sm font-medium flex items-center justify-center gap-2 w-full py-2"
+                           >
+                             <RefreshCw size={14} />
+                             Resend Link
+                           </button>
+                         </div>
+                       </div>
+                     </div>
+                   ) : (
+                     // Auth View
+                     <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                       <h2 className="text-2xl font-bold text-white mb-2">
+                         {isRegistering ? 'Create an Account' : 'Welcome Back'}
+                       </h2>
+                       <p className="text-slate-400 mb-8">
+                           {isRegistering ? 'Start your journey with AI-powered docs.' : 'Sign in to access your workspace.'}
+                       </p>
+                       
+                       <form onSubmit={handleAuth} className="space-y-5">
+                         {isRegistering && (
+                           <div className="space-y-1">
+                               <Input 
+                                 label="Full Name" 
+                                 placeholder="John Doe" 
+                                 value={name}
+                                 onChange={e => setName(e.target.value)}
+                                 required 
+                                 className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                               />
+                           </div>
+                         )}
+                         <div className="space-y-1">
+                           <Input 
+                             label="Email Address" 
+                             type="email" 
+                             placeholder="you@company.com" 
+                             value={email}
+                             onChange={e => setEmail(e.target.value)}
+                             required
+                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <Input 
+                             label="Password" 
+                             type="password" 
+                             placeholder="••••••••" 
+                             value={password}
+                             onChange={e => setPassword(e.target.value)}
+                             required
+                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                           />
+                           {!isRegistering && (
+                             <div className="flex justify-end pt-1">
+                               <button 
+                                 type="button"
+                                 onClick={handleForgotPassword}
+                                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                               >
+                                 Forgot Password?
+                               </button>
+                             </div>
+                           )}
+                         </div>
+
+                         {isRegistering && (
+                            <div className="space-y-1">
+                              <Input 
+                                label="Confirm Password" 
+                                type="password" 
+                                placeholder="••••••••" 
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                required
+                                className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                              />
+                            </div>
+                         )}
+                         
+                         <Button type="submit" className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" size="lg">
+                           {isRegistering ? 'Sign Up' : 'Sign In'}
+                         </Button>
+                       </form>
+
+                       <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                         <p className="text-slate-500 text-sm mb-3">
+                            {isRegistering ? 'Already have an account?' : "Don't have an account?"}
+                         </p>
+                         <button 
+                           onClick={() => setIsRegistering(!isRegistering)}
+                           className="text-white font-medium hover:text-blue-400 transition-colors border border-white/10 bg-white/5 px-6 py-2 rounded-lg hover:bg-white/10 w-full"
+                         >
+                           {isRegistering ? 'Sign In to Existing Account' : 'Create New Account'}
+                         </button>
+                       </div>
+                     </div>
+                   )}
+               </div>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2 relative z-10">SynapseSync.AI</h1>
-            <p className="text-slate-400 relative z-10">AI-Powered Document Intelligence</p>
-          </div>
-          
-          <div className="p-8">
-            {isVerifying ? (
-              // Verification View
-              <div>
-                <div className="flex items-center gap-2 mb-6">
-                  <button 
-                    onClick={() => setIsVerifying(false)} 
-                    className="p-1 hover:bg-slate-800 rounded-full transition-colors text-slate-400"
-                  >
-                    <ArrowLeft size={20} />
-                  </button>
-                  <h2 className="text-xl font-semibold text-white">Check your email</h2>
-                </div>
-                
-                <p className="text-slate-400 text-sm mb-6">
-                  We've sent a 6-digit confirmation code to <span className="text-white font-medium">{email}</span>.
-                </p>
-
-                <form onSubmit={handleVerifyCode} className="space-y-4">
-                  <Input 
-                    label="Confirmation Code" 
-                    placeholder="123456" 
-                    value={inputCode}
-                    onChange={e => setInputCode(e.target.value)}
-                    required 
-                    className="text-center text-lg tracking-widest"
-                    maxLength={6}
-                  />
-                  
-                  <Button type="submit" className="w-full" size="lg">
-                    Verify & Register
-                  </Button>
-                </form>
-
-                <div className="mt-6 text-center">
-                  <p className="text-sm text-slate-500 mb-2">Didn't receive the code?</p>
-                  <button 
-                    onClick={handleResendCode}
-                    className="text-blue-400 font-medium hover:underline hover:text-blue-300 transition-colors text-sm"
-                  >
-                    Resend Code
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // Standard Auth View
-              <>
-                <h2 className="text-xl font-semibold text-white mb-6">
-                  {isRegistering ? 'Create an Account' : 'Welcome Back'}
-                </h2>
-                
-                <form onSubmit={handleAuth} className="space-y-4">
-                  {isRegistering && (
-                    <Input 
-                      label="Full Name" 
-                      placeholder="John Doe" 
-                      value={name}
-                      onChange={e => setName(e.target.value)}
-                      required 
-                    />
-                  )}
-                  <Input 
-                    label="Email Address" 
-                    type="email" 
-                    placeholder="you@company.com" 
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    required
-                  />
-                  <Input 
-                    label="Password" 
-                    type="password" 
-                    placeholder="••••••••" 
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                  />
-                  
-                  <Button type="submit" className="w-full mt-2" size="lg">
-                    {isRegistering ? 'Sign Up' : 'Sign In'}
-                  </Button>
-                </form>
-
-                <div className="mt-6 text-center text-sm text-slate-500">
-                  {isRegistering ? 'Already have an account?' : "Don't have an account?"}{' '}
-                  <button 
-                    onClick={() => setIsRegistering(!isRegistering)}
-                    className="text-blue-400 font-medium hover:underline hover:text-blue-300 transition-colors"
-                  >
-                    {isRegistering ? 'Sign In' : 'Register'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </div>
     );
