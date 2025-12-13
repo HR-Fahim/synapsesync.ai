@@ -6,17 +6,10 @@ import { FileViewer } from './components/FileViewer';
 import { GoogleAuth } from './components/GoogleAuth';
 import { FilePicker } from './components/FilePicker';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { EmailVerification } from './components/EmailVerification';
 import { User, DocFile, ViewState, FileVersion, SubscriptionTier } from './types';
-import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck } from 'lucide-react';
+import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check } from 'lucide-react';
 import { auth } from './services/firebase';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  updateProfile,
-  sendPasswordResetEmail
-} from 'firebase/auth';
 
 // Mock Initial Data
 const MOCK_FILES: DocFile[] = [
@@ -54,11 +47,16 @@ function App() {
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   
   // Auth Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Forgot Password State
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [isResetSuccess, setIsResetSuccess] = useState(false);
 
   // App Data State
   const [files, setFiles] = useState<DocFile[]>(MOCK_FILES);
@@ -71,11 +69,22 @@ function App() {
 
   // Monitor Auth State
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
       if (firebaseUser) {
+        // Enforce email verification standard practice
+        if (!firebaseUser.emailVerified) {
+          // If the user exists but isn't verified, we don't log them into the app state.
+          // We assume handleAuth manages the flow for new signups.
+          // For reloading pages, we effectively treat them as logged out.
+          setUser(null);
+          // Only switch to AUTH if we aren't currently in the verification flow
+          if (view !== ViewState.EMAIL_VERIFICATION) {
+             setView(ViewState.AUTH);
+          }
+          return;
+        }
+
         // Map Firebase user to App User
-        // In a real app, we would fetch the extended profile (tier, stats) from Firestore
-        // For this demo, we initialize with default values if not already present
         setUser(prevUser => ({
           id: firebaseUser.uid,
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
@@ -85,12 +94,14 @@ function App() {
           lastEditReset: prevUser?.lastEditReset || new Date().toISOString(),
           autoUpdateInterval: prevUser?.autoUpdateInterval || 14
         }));
-        if (view === ViewState.AUTH) {
+        if (view === ViewState.AUTH || view === ViewState.EMAIL_VERIFICATION) {
           setView(ViewState.DASHBOARD);
         }
       } else {
         setUser(null);
-        setView(ViewState.AUTH);
+        if (view !== ViewState.EMAIL_VERIFICATION) {
+          setView(ViewState.AUTH);
+        }
       }
     });
     return () => unsubscribe();
@@ -142,20 +153,40 @@ function App() {
         }
 
         // Firebase Sign Up
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
         const name = email.split('@')[0];
-        await updateProfile(userCredential.user, {
-          displayName: name
-        });
         
-        showNotification('Account created successfully!');
+        if (userCredential.user) {
+          await userCredential.user.updateProfile({
+            displayName: name
+          });
+
+          // Send Verification Email
+          await userCredential.user.sendEmailVerification();
+          
+          // Important: Sign out immediately to prevent auto-login
+          await auth.signOut();
+          
+          setPendingVerificationEmail(email);
+          setView(ViewState.EMAIL_VERIFICATION);
+          // Do not set notification here as the new view explains it
+        }
         
       } else {
         // Firebase Login
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        
+        // Check Email Verification
+        if (userCredential.user && !userCredential.user.emailVerified) {
+          await auth.signOut();
+          showNotification('Please verify your email address to log in.');
+          setIsAuthLoading(false);
+          return;
+        }
+
         showNotification('Signed in successfully.');
       }
-      // View transition handled by onAuthStateChanged
+      // View transition handled by onAuthStateChanged for successful login
     } catch (error: any) {
       console.error(error);
       let msg = "Authentication failed.";
@@ -163,40 +194,92 @@ function App() {
       if (error.code === 'auth/invalid-credential') msg = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') msg = "No user found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
+      if (error.code === 'auth/too-many-requests') msg = "Too many failed attempts. Please try again later.";
+      showNotification(msg);
+    } finally {
+      // Only clear loading if we aren't switching to verification view (which is static)
+      // and if we aren't successful (which relies on onAuthStateChanged)
+      if (view === ViewState.AUTH && !isRegistering) {
+         setIsAuthLoading(false);
+      } else if (isRegistering && view !== ViewState.EMAIL_VERIFICATION) {
+         setIsAuthLoading(false);
+      } else if (!isRegistering) {
+         setIsAuthLoading(false);
+      }
+    }
+  };
+
+  const handleShowForgotPassword = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsForgotPassword(true);
+    setIsResetSuccess(false);
+    setNotification(null);
+  };
+
+  const handleSendResetLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      showNotification("Please enter your email address.");
+      return;
+    }
+    const cleanEmail = email.trim();
+    if (!isValidEmail(cleanEmail)) {
+      showNotification("Please enter a valid email address.");
+      return;
+    }
+
+    setIsAuthLoading(true);
+    try {
+      // Directly call sendPasswordResetEmail to avoid rate limits from double-checking user existence
+      await auth.sendPasswordResetEmail(cleanEmail);
+      
+      setIsResetSuccess(true);
+      // We don't show a notification here because the UI changes to the success view immediately
+    } catch (error: any) {
+      console.error("Reset Password Error:", error);
+      let msg = "Failed to send reset email. Please try again.";
+      
+      switch (error.code) {
+        case 'auth/invalid-email':
+          msg = "Please enter a valid email address.";
+          break;
+        case 'auth/user-not-found':
+          msg = "No account found with this email.";
+          break;
+        case 'auth/too-many-requests':
+          msg = "Too many requests. Please wait a few minutes before trying again.";
+          break;
+        default:
+          if (error.message) msg = error.message;
+      }
+
       showNotification(msg);
     } finally {
       setIsAuthLoading(false);
     }
   };
 
-  const handleForgotPassword = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!email) {
-      showNotification("Please enter your email address to reset password.");
-      return;
-    }
-    if (!isValidEmail(email)) {
-      showNotification("Please enter a valid email address.");
-      return;
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, email);
-      showNotification(`Password reset instructions sent to ${email}`);
-    } catch (error: any) {
-      showNotification("Failed to send reset email. Please check the address.");
-    }
+  const handleBackToLogin = () => {
+    setIsForgotPassword(false);
+    setIsResetSuccess(false);
+    setNotification(null);
+    setPassword('');
+    setConfirmPassword('');
+    setIsRegistering(false); // Ensure we are on login tab
+    setView(ViewState.AUTH);
   };
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await auth.signOut();
       // State reset handled by onAuthStateChanged
       setSelectedFileId(null);
       setIsRegistering(false);
       setEmail('');
       setPassword('');
       setConfirmPassword('');
+      setIsForgotPassword(false);
+      setIsResetSuccess(false);
       showNotification('Logged out successfully.');
     } catch (error) {
       showNotification('Error logging out.');
@@ -474,6 +557,15 @@ function App() {
     );
   }
 
+  if (view === ViewState.EMAIL_VERIFICATION) {
+    return (
+      <EmailVerification 
+        email={pendingVerificationEmail}
+        onBackToLogin={handleBackToLogin}
+      />
+    );
+  }
+
   if (view === ViewState.AUTH) {
     return (
       <div className="min-h-screen bg-slate-950 flex font-sans">
@@ -554,93 +646,156 @@ function App() {
 
                <div className="bg-slate-900/80 p-8 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md">
                    {/* Auth View */}
-                   <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                     <h2 className="text-2xl font-bold text-white mb-2">
-                       {isRegistering ? 'Create an Account' : 'Welcome Back'}
-                     </h2>
-                     <p className="text-slate-400 mb-8">
-                         {isRegistering ? 'Start your journey with AI-powered docs.' : 'Sign in to access your workspace.'}
-                     </p>
-                     
-                     <form onSubmit={handleAuth} className="space-y-5">
-                       <div className="space-y-1">
-                         <Input 
-                           label="Email Address" 
-                           type="email" 
-                           placeholder="you@company.com" 
-                           value={email}
-                           onChange={e => setEmail(e.target.value)}
-                           required
-                           className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                           disabled={isAuthLoading}
-                         />
-                       </div>
-                       <div className="space-y-1">
-                         <Input 
-                           label="Password" 
-                           type="password" 
-                           placeholder="••••••••" 
-                           value={password}
-                           onChange={e => setPassword(e.target.value)}
-                           required
-                           className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                           disabled={isAuthLoading}
-                         />
-                         {!isRegistering && (
-                           <div className="flex justify-end pt-1">
-                             <button 
-                               type="button"
-                               onClick={handleForgotPassword}
-                               className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                             >
-                               Forgot Password?
-                             </button>
-                           </div>
-                         )}
-                       </div>
-
-                       {isRegistering && (
-                          <div className="space-y-1">
-                            <Input 
-                              label="Confirm Password" 
-                              type="password" 
-                              placeholder="••••••••" 
-                              value={confirmPassword}
-                              onChange={e => setConfirmPassword(e.target.value)}
-                              required
-                              className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                              disabled={isAuthLoading}
-                            />
+                   {isForgotPassword ? (
+                      <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                        {isResetSuccess ? (
+                          <div className="text-center">
+                            <div className="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-1 ring-green-500/50">
+                              <Check size={32} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white mb-2">Check your inbox</h2>
+                            <p className="text-slate-400 mb-8">
+                              We sent you a password change link to <br/>
+                              <span className="text-white font-medium">{email}</span>
+                            </p>
+                            <Button 
+                              onClick={handleBackToLogin}
+                              className="w-full"
+                              size="lg"
+                            >
+                              Sign In
+                            </Button>
                           </div>
-                       )}
-                       
-                       <Button 
-                        type="submit" 
-                        isLoading={isAuthLoading}
-                        className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" 
-                        size="lg"
-                       >
-                         {isRegistering ? 'Sign Up' : 'Sign In'}
-                       </Button>
-                     </form>
-
-                     <div className="mt-8 pt-6 border-t border-white/5 text-center">
-                       <p className="text-slate-500 text-sm mb-3">
-                          {isRegistering ? 'Already have an account?' : "Don't have an account?"}
+                        ) : (
+                          <>
+                            <button 
+                              onClick={handleBackToLogin}
+                              className="flex items-center text-sm text-slate-500 hover:text-white mb-6 transition-colors"
+                            >
+                              <ArrowLeft size={16} className="mr-1" /> Back
+                            </button>
+                            
+                            <h2 className="text-2xl font-bold text-white mb-2">Reset Password</h2>
+                            <p className="text-slate-400 mb-8">
+                              Enter your email address and we'll send you a link to reset your password.
+                            </p>
+                            
+                            <form onSubmit={handleSendResetLink} className="space-y-5">
+                              <div className="space-y-1">
+                                <Input 
+                                  label="Email Address" 
+                                  type="email" 
+                                  placeholder="you@company.com" 
+                                  value={email}
+                                  onChange={e => setEmail(e.target.value)}
+                                  required
+                                  className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                                  disabled={isAuthLoading}
+                                  autoFocus
+                                />
+                              </div>
+                              
+                              <Button 
+                                type="submit" 
+                                isLoading={isAuthLoading}
+                                className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" 
+                                size="lg"
+                              >
+                                Get Reset Link
+                              </Button>
+                            </form>
+                          </>
+                        )}
+                      </div>
+                   ) : (
+                     <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                       <h2 className="text-2xl font-bold text-white mb-2">
+                         {isRegistering ? 'Create an Account' : 'Welcome Back'}
+                       </h2>
+                       <p className="text-slate-400 mb-8">
+                           {isRegistering ? 'Start your journey with AI-powered docs.' : 'Sign in to access your workspace.'}
                        </p>
-                       <button 
-                         onClick={() => {
-                           setIsRegistering(!isRegistering);
-                           setNotification(null);
-                         }}
-                         className="text-white font-medium hover:text-blue-400 transition-colors border border-white/10 bg-white/5 px-6 py-2 rounded-lg hover:bg-white/10 w-full"
-                         title={isRegistering ? 'Switch to Sign In' : 'Switch to Sign Up'}
-                         disabled={isAuthLoading}
-                       >
-                         {isRegistering ? 'Sign In to Existing Account' : 'Create New Account'}
-                       </button>
+                       
+                       <form onSubmit={handleAuth} className="space-y-5">
+                         <div className="space-y-1">
+                           <Input 
+                             label="Email Address" 
+                             type="email" 
+                             placeholder="you@company.com" 
+                             value={email}
+                             onChange={e => setEmail(e.target.value)}
+                             required
+                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                             disabled={isAuthLoading}
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <Input 
+                             label="Password" 
+                             type="password" 
+                             placeholder="••••••••" 
+                             value={password}
+                             onChange={e => setPassword(e.target.value)}
+                             required
+                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                             disabled={isAuthLoading}
+                           />
+                           {!isRegistering && (
+                             <div className="flex justify-end pt-1">
+                               <button 
+                                 type="button"
+                                 onClick={handleShowForgotPassword}
+                                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                               >
+                                 Forgot Password?
+                               </button>
+                             </div>
+                           )}
+                         </div>
+  
+                         {isRegistering && (
+                            <div className="space-y-1">
+                              <Input 
+                                label="Confirm Password" 
+                                type="password" 
+                                placeholder="••••••••" 
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                required
+                                className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                                disabled={isAuthLoading}
+                              />
+                            </div>
+                         )}
+                         
+                         <Button 
+                          type="submit" 
+                          isLoading={isAuthLoading}
+                          className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" 
+                          size="lg"
+                         >
+                           {isRegistering ? 'Sign Up' : 'Sign In'}
+                         </Button>
+                       </form>
+  
+                       <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                         <p className="text-slate-500 text-sm mb-3">
+                            {isRegistering ? 'Already have an account?' : "Don't have an account?"}
+                         </p>
+                         <button 
+                           onClick={() => {
+                             setIsRegistering(!isRegistering);
+                             setNotification(null);
+                           }}
+                           className="text-white font-medium hover:text-blue-400 transition-colors border border-white/10 bg-white/5 px-6 py-2 rounded-lg hover:bg-white/10 w-full"
+                           title={isRegistering ? 'Switch to Sign In' : 'Switch to Sign Up'}
+                           disabled={isAuthLoading}
+                         >
+                           {isRegistering ? 'Sign In to Existing Account' : 'Create New Account'}
+                         </button>
+                       </div>
                      </div>
-                   </div>
+                   )}
                </div>
             </div>
         </div>

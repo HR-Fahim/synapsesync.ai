@@ -1,6 +1,6 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getAnalytics } from "firebase/analytics";
+import firebase from 'firebase/app';
+import 'firebase/auth';
+import 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA5P3m4yf9fg2xoZyrImOBOWhaK70Bw4ZY",
@@ -13,6 +13,15 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const analytics = getAnalytics(app);
+// Ensure we handle the default export correctly if the environment wraps it (synthetic default)
+const firebaseNamespace = (firebase as any).default || firebase;
+
+// Initialize app if not already initialized
+const app = !firebaseNamespace.apps.length ? firebaseNamespace.initializeApp(firebaseConfig) : firebaseNamespace.app();
+
+// Export services
+// Using firebaseNamespace.auth() ensures we use the module-augmented namespace
+export const auth = firebaseNamespace.auth();
+export const analytics = firebaseNamespace.analytics();
+
+export default app;

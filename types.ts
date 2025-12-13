@@ -38,6 +38,7 @@ export interface ChatMessage {
 
 export enum ViewState {
   AUTH = 'AUTH',
+  EMAIL_VERIFICATION = 'EMAIL_VERIFICATION',
   DASHBOARD = 'DASHBOARD',
   FILE_DETAIL = 'FILE_DETAIL',
   GOOGLE_SIGNIN = 'GOOGLE_SIGNIN',
