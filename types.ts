@@ -1,3 +1,4 @@
+
 export type SubscriptionTier = 'FREE' | 'PRO' | 'PREMIUM';
 
 export interface User {
@@ -27,6 +28,7 @@ export interface DocFile {
   ownerId: string;
   currentVersionId: string;
   autoUpdateEnabled: boolean;
+  _isLite?: boolean; // Flag to indicate if content needs to be fetched from Storage
 }
 
 export interface ChatMessage {

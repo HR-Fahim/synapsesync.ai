@@ -8,45 +8,16 @@ import { FilePicker } from './components/FilePicker';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { EmailVerification } from './components/EmailVerification';
 import { User, DocFile, ViewState, FileVersion, SubscriptionTier } from './types';
-import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check } from 'lucide-react';
+import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check, Loader2, Cloud, CloudOff } from 'lucide-react';
 import { auth } from './services/firebase';
+import { StorageService } from './services/storage';
 
-// Mock Initial Data
-const MOCK_FILES: DocFile[] = [
-  {
-    id: '1',
-    title: 'Q3 Financial Overview',
-    type: 'doc',
-    ownerId: 'u1',
-    currentVersionId: 'v1-curr',
-    autoUpdateEnabled: true,
-    lastUpdated: new Date().toISOString(),
-    currentContent: `Financial Overview Q3\n\nRevenue has increased by 20% compared to last quarter. Key drivers include new product launches and expanded market reach.`,
-    versions: [
-      { id: 'v1-old-1', timestamp: new Date(Date.now() - 86400000).toISOString(), content: `Financial Overview Q3\n\nRevenue projections are steady.`, versionLabel: 'Auto-Save 10:00 AM' }
-    ]
-  },
-  {
-    id: '2',
-    title: 'Product Launch Strategy',
-    type: 'doc',
-    ownerId: 'u1',
-    currentVersionId: 'v2-curr',
-    autoUpdateEnabled: false,
-    lastUpdated: new Date().toISOString(),
-    currentContent: `Product Launch Strategy 2024\n\n1. Executive Summary\nThis document outlines the strategic go-to-market plan for our new AI-powered widget. The primary goal is to achieve 10k users in the first month.\n\n2. Target Audience\n- Tech enthusiasts\n- Early adopters\n- Enterprise CTOs\n\n3. Marketing Channels\n- Social Media (LinkedIn, Twitter)\n- Tech Blogs\n- Email Newsletters`,
-    versions: [
-      { id: 'v2-old-1', timestamp: new Date(Date.now() - 172800000).toISOString(), content: `Product Launch Strategy\n\nRough notes on marketing...`, versionLabel: 'Auto-Save 09:30 AM' },
-      { id: 'v2-old-2', timestamp: new Date(Date.now() - 86400000).toISOString(), content: `Product Launch Strategy 2024\n\n1. Executive Summary\nPending review...`, versionLabel: 'Auto-Save 02:15 PM' }
-    ]
-  }
-];
-
-function App() {
+export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(false); 
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   
   // Auth Form State
@@ -59,53 +30,106 @@ function App() {
   const [isResetSuccess, setIsResetSuccess] = useState(false);
 
   // App Data State
-  const [files, setFiles] = useState<DocFile[]>(MOCK_FILES);
+  const [files, setFiles] = useState<DocFile[]>([]); 
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false); // New state for background sync
   const [showSubscription, setShowSubscription] = useState(false);
 
   // File Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Monitor Auth State
+  const showNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 4000);
+  };
+
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        // Enforce email verification standard practice
-        if (!firebaseUser.emailVerified) {
-          // If the user exists but isn't verified, we don't log them into the app state.
-          // We assume handleAuth manages the flow for new signups.
-          // For reloading pages, we effectively treat them as logged out.
+        
+        // Force refresh token to get latest emailVerified status
+        try {
+          await firebaseUser.reload();
+        } catch (e) {
+          console.warn("Could not reload user profile", e);
+        }
+        
+        // Re-check verification after reload
+        if (!auth.currentUser?.emailVerified) {
           setUser(null);
-          // Only switch to AUTH if we aren't currently in the verification flow
-          if (view !== ViewState.EMAIL_VERIFICATION) {
-             setView(ViewState.AUTH);
-          }
+          setIsDataLoading(false);
+          setIsAuthLoading(false); // Ensure loading is off
+          setView(curr => (curr === ViewState.EMAIL_VERIFICATION ? curr : ViewState.AUTH));
           return;
         }
 
-        // Map Firebase user to App User
-        setUser(prevUser => ({
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-          email: firebaseUser.email || '',
-          tier: prevUser?.tier || 'FREE', 
-          editsUsed: prevUser?.editsUsed || 0,
-          lastEditReset: prevUser?.lastEditReset || new Date().toISOString(),
-          autoUpdateInterval: prevUser?.autoUpdateInterval || 14
-        }));
-        if (view === ViewState.AUTH || view === ViewState.EMAIL_VERIFICATION) {
-          setView(ViewState.DASHBOARD);
+        // --- AUTHENTICATED & VERIFIED ---
+        setView(curr => {
+            if (curr === ViewState.AUTH || curr === ViewState.EMAIL_VERIFICATION) {
+              return ViewState.DASHBOARD;
+            }
+            return curr;
+        });
+        
+        setIsDataLoading(true);
+
+        try {
+          const userId = firebaseUser.uid;
+          
+          // 1. Fetch User Profile (Cloud First)
+          let currentUser = await StorageService.getUserProfile(userId);
+          
+          if (!currentUser) {
+            // New User Initialization
+            currentUser = {
+              id: userId,
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              email: firebaseUser.email || '',
+              tier: 'FREE', 
+              editsUsed: 0,
+              lastEditReset: new Date().toISOString(),
+              autoUpdateInterval: 14
+            };
+            await StorageService.saveUserProfile(currentUser);
+          }
+          
+          setUser(currentUser);
+
+          // 2. Fetch Files List (Cloud First)
+          // This retrieves metadata only (id, title, version count) for speed
+          const userFiles = await StorageService.getUserFiles(userId);
+          setFiles(userFiles);
+
+        } catch (error) {
+          console.error("Data Initialization Error:", error);
+          showNotification("Offline Mode: Showing cached data.");
+          
+           // Fallback to minimal user object if offline
+           if (!user) {
+              setUser({
+                  id: firebaseUser.uid,
+                  name: firebaseUser.displayName || 'User',
+                  email: firebaseUser.email || '',
+                  tier: 'FREE', editsUsed: 0, lastEditReset: new Date().toISOString(), autoUpdateInterval: 14
+              });
+           }
+        } finally {
+          setIsDataLoading(false);
+          setIsAuthLoading(false); 
         }
+
       } else {
+        // Not authenticated
         setUser(null);
-        if (view !== ViewState.EMAIL_VERIFICATION) {
-          setView(ViewState.AUTH);
-        }
+        setFiles([]);
+        setView(curr => (curr === ViewState.AUTH ? curr : ViewState.AUTH));
+        setIsAuthLoading(false); 
+        setIsDataLoading(false);
       }
     });
     return () => unsubscribe();
-  }, [view]);
+  }, []); 
 
   // Check and Reset Weekly Edits
   useEffect(() => {
@@ -116,12 +140,13 @@ function App() {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
       if (diffDays >= 7) {
-        setUser(prev => prev ? {
-          ...prev,
+        const updatedUser = {
+          ...user,
           editsUsed: 0,
           lastEditReset: now.toISOString()
-        } : null);
-        showNotification("Weekly edit limit has been reset.");
+        };
+        setUser(updatedUser);
+        StorageService.saveUserProfile(updatedUser).catch(e => console.error(e)); 
       }
     }
   }, [user?.lastEditReset]); 
@@ -152,7 +177,6 @@ function App() {
           return;
         }
 
-        // Firebase Sign Up
         const userCredential = await auth.createUserWithEmailAndPassword(email, password);
         const name = email.split('@')[0];
         
@@ -161,22 +185,16 @@ function App() {
             displayName: name
           });
 
-          // Send Verification Email
           await userCredential.user.sendEmailVerification();
-          
-          // Important: Sign out immediately to prevent auto-login
           await auth.signOut();
           
           setPendingVerificationEmail(email);
           setView(ViewState.EMAIL_VERIFICATION);
-          // Do not set notification here as the new view explains it
         }
         
       } else {
-        // Firebase Login
         const userCredential = await auth.signInWithEmailAndPassword(email, password);
         
-        // Check Email Verification
         if (userCredential.user && !userCredential.user.emailVerified) {
           await auth.signOut();
           showNotification('Please verify your email address to log in.');
@@ -186,26 +204,15 @@ function App() {
 
         showNotification('Signed in successfully.');
       }
-      // View transition handled by onAuthStateChanged for successful login
     } catch (error: any) {
       console.error(error);
+      setIsAuthLoading(false);
       let msg = "Authentication failed.";
       if (error.code === 'auth/email-already-in-use') msg = "That email is already in use.";
       if (error.code === 'auth/invalid-credential') msg = "Invalid email or password.";
       if (error.code === 'auth/user-not-found') msg = "No user found with this email.";
       if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
-      if (error.code === 'auth/too-many-requests') msg = "Too many failed attempts. Please try again later.";
       showNotification(msg);
-    } finally {
-      // Only clear loading if we aren't switching to verification view (which is static)
-      // and if we aren't successful (which relies on onAuthStateChanged)
-      if (view === ViewState.AUTH && !isRegistering) {
-         setIsAuthLoading(false);
-      } else if (isRegistering && view !== ViewState.EMAIL_VERIFICATION) {
-         setIsAuthLoading(false);
-      } else if (!isRegistering) {
-         setIsAuthLoading(false);
-      }
     }
   };
 
@@ -230,29 +237,12 @@ function App() {
 
     setIsAuthLoading(true);
     try {
-      // Directly call sendPasswordResetEmail to avoid rate limits from double-checking user existence
       await auth.sendPasswordResetEmail(cleanEmail);
-      
       setIsResetSuccess(true);
-      // We don't show a notification here because the UI changes to the success view immediately
     } catch (error: any) {
       console.error("Reset Password Error:", error);
       let msg = "Failed to send reset email. Please try again.";
-      
-      switch (error.code) {
-        case 'auth/invalid-email':
-          msg = "Please enter a valid email address.";
-          break;
-        case 'auth/user-not-found':
-          msg = "No account found with this email.";
-          break;
-        case 'auth/too-many-requests':
-          msg = "Too many requests. Please wait a few minutes before trying again.";
-          break;
-        default:
-          if (error.message) msg = error.message;
-      }
-
+      if (error.message) msg = error.message;
       showNotification(msg);
     } finally {
       setIsAuthLoading(false);
@@ -265,14 +255,13 @@ function App() {
     setNotification(null);
     setPassword('');
     setConfirmPassword('');
-    setIsRegistering(false); // Ensure we are on login tab
+    setIsRegistering(false);
     setView(ViewState.AUTH);
   };
 
   const handleLogout = async () => {
     try {
       await auth.signOut();
-      // State reset handled by onAuthStateChanged
       setSelectedFileId(null);
       setIsRegistering(false);
       setEmail('');
@@ -284,11 +273,6 @@ function App() {
     } catch (error) {
       showNotification('Error logging out.');
     }
-  };
-
-  const showNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 4000);
   };
 
   const getMaxFiles = (tier: SubscriptionTier) => {
@@ -304,7 +288,7 @@ function App() {
     if (!user) return false;
     const limit = getMaxFiles(user.tier);
     if (files.length >= limit) {
-      showNotification(`File limit reached for ${user.tier} plan. Upgrade to add more.`);
+      showNotification(`File limit (${limit}) reached for ${user.tier} plan. Upgrade to add more.`);
       return false;
     }
     return true;
@@ -321,22 +305,24 @@ function App() {
     setView(ViewState.FILE_PICKER);
   };
 
-  const handleImportFile = (driveFile: { id: string, name: string, type: 'doc' | 'sheet' | 'text' }) => {
+  const handleImportFile = async (driveFile: { id: string, name: string, type: 'doc' | 'sheet' | 'text' }) => {
+    if (!user) return;
+    
     let loremContent = '';
     
     if (driveFile.type === 'doc') {
-      loremContent = `Imported content for ${driveFile.name}\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`;
+      loremContent = `Imported content for ${driveFile.name}\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit.`;
     } else if (driveFile.type === 'sheet') {
-      loremContent = `Item,Quantity,Price\nWidget A,10,100\nWidget B,20,150\nWidget C,5,50`;
+      loremContent = `Item,Quantity,Price\nWidget A,10,100`;
     } else {
-      loremContent = `Log file content for ${driveFile.name}\n[INFO] Initializing system...\n[INFO] Connection established.\n[WARN] Low latency detected.`;
+      loremContent = `Log file content for ${driveFile.name}\n[INFO] Initializing system...`;
     }
 
     const newFile: DocFile = {
       id: `imported-${Date.now()}`,
       title: driveFile.name,
       type: driveFile.type,
-      ownerId: user?.id || 'u1',
+      ownerId: user.id,
       currentVersionId: 'v1-curr',
       lastUpdated: new Date().toISOString(),
       currentContent: loremContent,
@@ -346,23 +332,34 @@ function App() {
 
     setFiles(prev => [...prev, newFile]);
     setView(ViewState.DASHBOARD);
-    showNotification(`Imported "${driveFile.name}" and enabled auto-sync.`);
+    showNotification(`Importing "${driveFile.name}"...`);
+    
+    setIsSyncing(true);
+    StorageService.uploadFile(user.id, newFile)
+      .then(() => showNotification(`Imported "${driveFile.name}" successfully`))
+      .catch(() => showNotification("Saved locally (Sync pending)"))
+      .finally(() => setIsSyncing(false));
   };
 
   const handleUploadClick = () => {
     if (checkFileLimit()) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
       fileInputRef.current?.click();
     }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || !user) return;
+
+    if (!checkFileLimit()) {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+    }
 
     const fileName = file.name;
     const fileExtension = fileName.split('.').pop()?.toLowerCase();
     
-    // Validate type - Only allow docs and text
     if (!['doc', 'docx', 'txt', 'md'].includes(fileExtension || '')) {
       showNotification("Only document (.doc, .docx) and text (.txt, .md) files are allowed.");
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -376,7 +373,7 @@ function App() {
 
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       let content = e.target?.result as string;
 
       if (['doc', 'docx'].includes(fileExtension || '')) {
@@ -387,7 +384,7 @@ function App() {
         id: `uploaded-${Date.now()}`,
         title: fileName,
         type: type,
-        ownerId: user?.id || 'u1',
+        ownerId: user.id,
         currentVersionId: 'v1-curr',
         lastUpdated: new Date().toISOString(),
         currentContent: content,
@@ -395,37 +392,78 @@ function App() {
         autoUpdateEnabled: true
       };
 
+      // 1. Optimistic UI Update
       setFiles(prev => [...prev, newFile]);
-      showNotification(`File "${fileName}" uploaded successfully.`);
+      showNotification(`Uploading "${fileName}"...`);
+      setIsSyncing(true);
       
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      // 2. Cloud Sync
+      StorageService.uploadFile(user.id, newFile)
+        .then(() => showNotification("Upload complete."))
+        .catch((error) => {
+           console.warn("Upload fallback", error);
+           showNotification(`File "${fileName}" saved offline.`);
+        })
+        .finally(() => setIsSyncing(false));
+
+      // 3. Reset Input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    reader.onerror = () => {
+        showNotification("Error reading file.");
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     reader.readAsText(file);
   };
 
-  const handleSelectFile = (id: string) => {
+  const handleSelectFile = async (id: string) => {
+    const file = files.find(f => f.id === id);
+    if (!file || !user) return;
+
+    // Check if the file is a 'lite' version (metadata only) from Firestore listing
+    // OR if the content is empty string (which indicates lite version loaded from cache)
+    if (file._isLite || !file.currentContent) {
+      setIsDataLoading(true);
+      try {
+        const fullFile = await StorageService.loadFullFile(user.id, id);
+        if (fullFile) {
+           // Update the file list with the full content AND history
+           setFiles(prev => prev.map(f => f.id === id ? fullFile : f));
+        } else {
+           showNotification("Could not download file content.");
+        }
+      } catch (error) {
+        console.error("Failed to load file content", error);
+        showNotification("Failed to load content.");
+      }
+      setIsDataLoading(false);
+    }
+
     setSelectedFileId(id);
     setView(ViewState.FILE_DETAIL);
   };
 
-  const handleDeleteFile = (e: React.MouseEvent, fileId: string) => {
-    e.preventDefault(); // Prevent standard button behavior
-    e.stopPropagation(); // Stop bubbling to the card container
+  const handleDeleteFile = async (e: React.MouseEvent, fileId: string) => {
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    if (!user) return;
     
-    // Immediate deletion without confirmation as requested
-    setFiles(prevFiles => {
-      const updatedFiles = prevFiles.filter(f => f.id !== fileId);
-      return updatedFiles;
-    });
-    
+    // Optimistic Delete
+    setFiles(prevFiles => prevFiles.filter(f => f.id !== fileId));
     if (selectedFileId === fileId) {
       setSelectedFileId(null);
       setView(ViewState.DASHBOARD);
     }
-    showNotification('File deleted successfully.');
+
+    // Sync
+    try {
+      await StorageService.deleteFile(user.id, fileId);
+      showNotification('File deleted.');
+    } catch (error) {
+      showNotification('File deleted (offline).');
+    }
   };
 
   const handleBackToDashboard = () => {
@@ -433,91 +471,140 @@ function App() {
     setView(ViewState.DASHBOARD);
   };
 
-  const handleUpdateFile = (fileId: string, newContent: string, isAutoSave: boolean) => {
-    setFiles(prevFiles => prevFiles.map(file => {
-      if (file.id === fileId) {
-        // Only increment user edit count if it's a manual save
-        if (!isAutoSave && user) {
-           setUser(prev => prev ? { ...prev, editsUsed: prev.editsUsed + 1 } : null);
-        }
+  const handleUpdateFile = async (fileId: string, newContent: string, isAutoSave: boolean) => {
+    if (!user) return;
+    
+    const fileToUpdate = files.find(f => f.id === fileId);
+    if (!fileToUpdate) return;
 
-        const currentTime = new Date();
-        const versionLabel = isAutoSave 
-          ? `Auto-Save ${currentTime.toLocaleTimeString()}`
-          : `Saved ${currentTime.toLocaleTimeString()}`;
+    // 1. Update User State (Edit Counts)
+    let updatedUser = user;
+    if (!isAutoSave) {
+       updatedUser = { ...user, editsUsed: user.editsUsed + 1 };
+       setUser(updatedUser);
+       // Save user profile in background
+       StorageService.saveUserProfile(updatedUser).catch(console.error);
+    }
 
-        const newVersion: FileVersion = {
-          id: Date.now().toString(),
-          timestamp: currentTime.toISOString(),
-          content: file.currentContent,
-          versionLabel: versionLabel
-        };
+    const currentTime = new Date();
+    const versionLabel = isAutoSave 
+      ? `Auto-Save ${currentTime.toLocaleTimeString()}`
+      : `Saved ${currentTime.toLocaleTimeString()}`;
 
-        // Added email notification simulation message
-        const msg = isAutoSave 
-          ? `File "${file.title}" auto-updated. Email notification sent.` 
-          : `File "${file.title}" saved successfully. Email notification sent.`;
-        
-        showNotification(msg);
-        
-        return {
-          ...file,
-          currentContent: newContent,
-          lastUpdated: currentTime.toISOString(),
-          versions: [...file.versions, newVersion]
-        };
-      }
-      return file;
-    }));
+    // Ensure versions array exists
+    const currentVersions = fileToUpdate.versions || [];
+
+    const newVersion: FileVersion = {
+      id: Date.now().toString(),
+      timestamp: currentTime.toISOString(),
+      content: fileToUpdate.currentContent,
+      versionLabel: versionLabel
+    };
+
+    const updatedFile: DocFile = {
+      ...fileToUpdate,
+      currentContent: newContent,
+      lastUpdated: currentTime.toISOString(),
+      versions: [...currentVersions, newVersion],
+      _isLite: false 
+    };
+
+    // 2. Optimistic File Update
+    setFiles(prevFiles => prevFiles.map(file => file.id === fileId ? updatedFile : file));
+    
+    if (!isAutoSave) showNotification("Saving...");
+
+    // 3. Background Sync
+    setIsSyncing(true);
+    StorageService.uploadFile(user.id, updatedFile)
+      .then(() => {
+         if (!isAutoSave) showNotification("Saved successfully");
+      })
+      .catch((error) => {
+         console.warn("Save failed", error);
+         showNotification("Saved locally (Sync pending)");
+      })
+      .finally(() => setIsSyncing(false));
   };
 
-  const handleRestoreVersion = (fileId: string, versionId: string) => {
-    setFiles(prevFiles => prevFiles.map(file => {
-      if (file.id === fileId) {
-        const versionToRestore = file.versions.find(v => v.id === versionId);
-        if (!versionToRestore) return file;
+  const handleRestoreVersion = async (fileId: string, versionId: string) => {
+    if (!user) return;
+    
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
 
-        const backupVersion: FileVersion = {
-          id: `backup-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          content: file.currentContent,
-          versionLabel: `Pre-Restore Backup`
-        };
+    const versionToRestore = file.versions.find(v => v.id === versionId);
+    if (!versionToRestore) return;
 
-        showNotification(`Restored version from ${new Date(versionToRestore.timestamp).toLocaleDateString()}`);
+    const backupVersion: FileVersion = {
+      id: `backup-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      content: file.currentContent,
+      versionLabel: `Pre-Restore Backup`
+    };
 
-        return {
-          ...file,
-          currentContent: versionToRestore.content,
-          lastUpdated: new Date().toISOString(),
-          versions: [...file.versions, backupVersion]
-        };
-      }
-      return file;
-    }));
+    const updatedFile: DocFile = {
+      ...file,
+      currentContent: versionToRestore.content,
+      lastUpdated: new Date().toISOString(),
+      versions: [...file.versions, backupVersion],
+      _isLite: false
+    };
+
+    // Optimistic Restore
+    setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
+    showNotification(`Restoring version...`);
+
+    setIsSyncing(true);
+    StorageService.uploadFile(user.id, updatedFile)
+      .then(() => showNotification("Version restored"))
+      .catch(() => showNotification("Restored locally"))
+      .finally(() => setIsSyncing(false));
   };
 
-  const handleToggleAutoUpdate = (fileId: string) => {
-    setFiles(prevFiles => prevFiles.map(file => {
-      if (file.id === fileId) {
-        const newState = !file.autoUpdateEnabled;
-        showNotification(`AI Auto-Update ${newState ? 'Enabled' : 'Disabled'} for "${file.title}"`);
-        return { ...file, autoUpdateEnabled: newState };
-      }
-      return file;
-    }));
+  const handleToggleAutoUpdate = async (fileId: string) => {
+    if (!user) return;
+
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
+    
+    const newState = !file.autoUpdateEnabled;
+    const updatedFile = { ...file, autoUpdateEnabled: newState };
+
+    // Optimistic Toggle
+    setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
+    showNotification(`AI Auto-Update ${newState ? 'Enabled' : 'Disabled'}`);
+
+    setIsSyncing(true);
+    StorageService.uploadFile(user.id, updatedFile)
+      .catch(() => {})
+      .finally(() => setIsSyncing(false));
   };
 
-  const handleUpgrade = (tier: SubscriptionTier) => {
+  const handleUpgrade = async (tier: SubscriptionTier) => {
     if (user) {
-      setUser({ ...user, tier: tier, autoUpdateInterval: 14 }); // Reset interval on tier change
-      showNotification(`Successfully upgraded to ${tier} plan!`);
+      const updatedUser = { ...user, tier: tier, autoUpdateInterval: 14 };
+      setUser(updatedUser);
+      // Persist upgrade
+      try {
+        await StorageService.saveUserProfile(updatedUser);
+        showNotification(`Successfully upgraded to ${tier} plan!`);
+      } catch (error) {
+        showNotification(`Upgraded to ${tier} (Offline mode).`);
+      }
     }
   };
 
-  const handleLoopChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleLoopChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (user) {
-      setUser({ ...user, autoUpdateInterval: parseInt(e.target.value) });
+      const updatedUser = { ...user, autoUpdateInterval: parseInt(e.target.value) };
+      setUser(updatedUser);
+      // Ensure this setting is persisted to DB
+      setIsSyncing(true);
+      StorageService.saveUserProfile(updatedUser)
+        .then(() => showNotification("Settings saved"))
+        .catch(() => showNotification("Settings saved locally"))
+        .finally(() => setIsSyncing(false));
     }
   };
 
@@ -803,6 +890,18 @@ function App() {
     );
   }
 
+  // --- LOADING STATE (Prevent Black Screen) ---
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+         <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+            <p className="text-slate-400 text-lg animate-pulse">Initializing SynapseSync...</p>
+         </div>
+      </div>
+    );
+  }
+
   const selectedFile = files.find(f => f.id === selectedFileId);
 
   return (
@@ -812,6 +911,14 @@ function App() {
           <Mail size={18} className="text-blue-400" />
           {notification}
         </div>
+      )}
+      
+      {/* Background Sync Indicator */}
+      {isSyncing && (
+         <div className="fixed bottom-4 right-4 bg-slate-800/80 backdrop-blur text-slate-400 px-4 py-2 rounded-full border border-white/5 text-xs flex items-center gap-2 z-50 animate-pulse">
+           <Cloud size={14} className="text-blue-400" />
+           Syncing changes...
+         </div>
       )}
 
       {showSubscription && user && (
@@ -876,7 +983,12 @@ function App() {
             </div>
           </div>
 
-          {files.length === 0 ? (
+          {isDataLoading ? (
+            <div className="flex flex-col items-center justify-center py-24 text-slate-500">
+              <Loader2 size={48} className="animate-spin mb-4" />
+              <p>Syncing with Cloud Storage...</p>
+            </div>
+          ) : files.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 px-4 text-center rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30">
               <div className="bg-slate-800/50 p-6 rounded-full mb-6 ring-1 ring-white/10">
                 <Upload size={48} className="text-slate-500" strokeWidth={1.5} />
@@ -910,7 +1022,7 @@ function App() {
                         {getFileIcon(file.type)}
                       </div>
                       <div className="flex items-center gap-2">
-                        {file.versions.length > 0 && (
+                        {(file.versions && file.versions.length > 0) && (
                            <span className="bg-slate-800 text-slate-400 text-xs font-medium px-2 py-1 rounded-full border border-slate-700">
                              {file.versions.length} versions
                            </span>
@@ -965,5 +1077,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
