@@ -16,14 +16,13 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
   const [isRegistering, setIsRegistering] = useState(false);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
-  const [isDataLoading, setIsDataLoading] = useState(false); 
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   
   // Auth Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
 
   // Forgot Password State
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -33,7 +32,11 @@ export function App() {
   const [files, setFiles] = useState<DocFile[]>([]); 
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false); // New state for background sync
+  
+  // Sync States
+  const [isSyncing, setIsSyncing] = useState(false); // For background tasks (Auto-save)
+  const [isBlockingSync, setIsBlockingSync] = useState(false); // For critical tasks (Initial load, Upload, Manual Save)
+
   const [showSubscription, setShowSubscription] = useState(false);
 
   // File Upload Ref
@@ -48,23 +51,20 @@ export function App() {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         
-        // Force refresh token to get latest emailVerified status
         try {
           await firebaseUser.reload();
         } catch (e) {
           console.warn("Could not reload user profile", e);
         }
         
-        // Re-check verification after reload
         if (!auth.currentUser?.emailVerified) {
           setUser(null);
-          setIsDataLoading(false);
-          setIsAuthLoading(false); // Ensure loading is off
+          setIsBlockingSync(false);
+          setIsAuthLoading(false);
           setView(curr => (curr === ViewState.EMAIL_VERIFICATION ? curr : ViewState.AUTH));
           return;
         }
 
-        // --- AUTHENTICATED & VERIFIED ---
         setView(curr => {
             if (curr === ViewState.AUTH || curr === ViewState.EMAIL_VERIFICATION) {
               return ViewState.DASHBOARD;
@@ -72,16 +72,16 @@ export function App() {
             return curr;
         });
         
-        setIsDataLoading(true);
+        // Start Blocking Sync for Initial Data Load
+        setIsBlockingSync(true);
 
         try {
           const userId = firebaseUser.uid;
           
-          // 1. Fetch User Profile (Cloud First)
+          // 1. Fetch User Profile
           let currentUser = await StorageService.getUserProfile(userId);
           
           if (!currentUser) {
-            // New User Initialization
             currentUser = {
               id: userId,
               name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
@@ -96,8 +96,7 @@ export function App() {
           
           setUser(currentUser);
 
-          // 2. Fetch Files List (Cloud First)
-          // This retrieves metadata only (id, title, version count) for speed
+          // 2. Fetch Files List
           const userFiles = await StorageService.getUserFiles(userId);
           setFiles(userFiles);
 
@@ -105,7 +104,6 @@ export function App() {
           console.error("Data Initialization Error:", error);
           showNotification("Offline Mode: Showing cached data.");
           
-           // Fallback to minimal user object if offline
            if (!user) {
               setUser({
                   id: firebaseUser.uid,
@@ -115,23 +113,21 @@ export function App() {
               });
            }
         } finally {
-          setIsDataLoading(false);
+          setIsBlockingSync(false);
           setIsAuthLoading(false); 
         }
 
       } else {
-        // Not authenticated
         setUser(null);
         setFiles([]);
         setView(curr => (curr === ViewState.AUTH ? curr : ViewState.AUTH));
         setIsAuthLoading(false); 
-        setIsDataLoading(false);
+        setIsBlockingSync(false);
       }
     });
     return () => unsubscribe();
   }, []); 
 
-  // Check and Reset Weekly Edits
   useEffect(() => {
     if (user) {
       const now = new Date();
@@ -334,11 +330,11 @@ export function App() {
     setView(ViewState.DASHBOARD);
     showNotification(`Importing "${driveFile.name}"...`);
     
-    setIsSyncing(true);
+    setIsBlockingSync(true); // BLOCKING
     StorageService.uploadFile(user.id, newFile)
       .then(() => showNotification(`Imported "${driveFile.name}" successfully`))
       .catch(() => showNotification("Saved locally (Sync pending)"))
-      .finally(() => setIsSyncing(false));
+      .finally(() => setIsBlockingSync(false));
   };
 
   const handleUploadClick = () => {
@@ -394,17 +390,16 @@ export function App() {
 
       // 1. Optimistic UI Update
       setFiles(prev => [...prev, newFile]);
-      showNotification(`Uploading "${fileName}"...`);
-      setIsSyncing(true);
       
-      // 2. Cloud Sync
+      // 2. Cloud Sync (Blocking)
+      setIsBlockingSync(true); 
       StorageService.uploadFile(user.id, newFile)
         .then(() => showNotification("Upload complete."))
         .catch((error) => {
            console.warn("Upload fallback", error);
            showNotification(`File "${fileName}" saved offline.`);
         })
-        .finally(() => setIsSyncing(false));
+        .finally(() => setIsBlockingSync(false));
 
       // 3. Reset Input
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -422,14 +417,11 @@ export function App() {
     const file = files.find(f => f.id === id);
     if (!file || !user) return;
 
-    // Check if the file is a 'lite' version (metadata only) from Firestore listing
-    // OR if the content is empty string (which indicates lite version loaded from cache)
     if (file._isLite || !file.currentContent) {
-      setIsDataLoading(true);
+      setIsBlockingSync(true); // Blocking load for content to ensure consistency
       try {
         const fullFile = await StorageService.loadFullFile(user.id, id);
         if (fullFile) {
-           // Update the file list with the full content AND history
            setFiles(prev => prev.map(f => f.id === id ? fullFile : f));
         } else {
            showNotification("Could not download file content.");
@@ -438,7 +430,7 @@ export function App() {
         console.error("Failed to load file content", error);
         showNotification("Failed to load content.");
       }
-      setIsDataLoading(false);
+      setIsBlockingSync(false);
     }
 
     setSelectedFileId(id);
@@ -457,12 +449,14 @@ export function App() {
       setView(ViewState.DASHBOARD);
     }
 
-    // Sync
+    setIsBlockingSync(true);
     try {
       await StorageService.deleteFile(user.id, fileId);
       showNotification('File deleted.');
     } catch (error) {
       showNotification('File deleted (offline).');
+    } finally {
+        setIsBlockingSync(false);
     }
   };
 
@@ -477,12 +471,10 @@ export function App() {
     const fileToUpdate = files.find(f => f.id === fileId);
     if (!fileToUpdate) return;
 
-    // 1. Update User State (Edit Counts)
     let updatedUser = user;
     if (!isAutoSave) {
        updatedUser = { ...user, editsUsed: user.editsUsed + 1 };
        setUser(updatedUser);
-       // Save user profile in background
        StorageService.saveUserProfile(updatedUser).catch(console.error);
     }
 
@@ -491,7 +483,6 @@ export function App() {
       ? `Auto-Save ${currentTime.toLocaleTimeString()}`
       : `Saved ${currentTime.toLocaleTimeString()}`;
 
-    // Ensure versions array exists
     const currentVersions = fileToUpdate.versions || [];
 
     const newVersion: FileVersion = {
@@ -501,21 +492,29 @@ export function App() {
       versionLabel: versionLabel
     };
 
+    // HISTORY LIMIT: Keep only last 10 versions
+    let updatedVersions = [...currentVersions, newVersion];
+    if (updatedVersions.length > 10) {
+        updatedVersions = updatedVersions.slice(updatedVersions.length - 10);
+    }
+
     const updatedFile: DocFile = {
       ...fileToUpdate,
       currentContent: newContent,
       lastUpdated: currentTime.toISOString(),
-      versions: [...currentVersions, newVersion],
+      versions: updatedVersions,
       _isLite: false 
     };
 
-    // 2. Optimistic File Update
     setFiles(prevFiles => prevFiles.map(file => file.id === fileId ? updatedFile : file));
     
-    if (!isAutoSave) showNotification("Saving...");
+    // Logic: Manual saves are BLOCKING. Auto-saves are BACKGROUND.
+    if (!isAutoSave) {
+        setIsBlockingSync(true);
+    } else {
+        setIsSyncing(true);
+    }
 
-    // 3. Background Sync
-    setIsSyncing(true);
     StorageService.uploadFile(user.id, updatedFile)
       .then(() => {
          if (!isAutoSave) showNotification("Saved successfully");
@@ -524,7 +523,10 @@ export function App() {
          console.warn("Save failed", error);
          showNotification("Saved locally (Sync pending)");
       })
-      .finally(() => setIsSyncing(false));
+      .finally(() => {
+          if (!isAutoSave) setIsBlockingSync(false);
+          else setIsSyncing(false);
+      });
   };
 
   const handleRestoreVersion = async (fileId: string, versionId: string) => {
@@ -543,23 +545,28 @@ export function App() {
       versionLabel: `Pre-Restore Backup`
     };
 
+    // HISTORY LIMIT: Keep only last 10 versions even on restore
+    let updatedVersions = [...file.versions, backupVersion];
+    if (updatedVersions.length > 10) {
+        updatedVersions = updatedVersions.slice(updatedVersions.length - 10);
+    }
+
     const updatedFile: DocFile = {
       ...file,
       currentContent: versionToRestore.content,
       lastUpdated: new Date().toISOString(),
-      versions: [...file.versions, backupVersion],
+      versions: updatedVersions,
       _isLite: false
     };
 
-    // Optimistic Restore
     setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
     showNotification(`Restoring version...`);
 
-    setIsSyncing(true);
+    setIsBlockingSync(true); // BLOCKING
     StorageService.uploadFile(user.id, updatedFile)
       .then(() => showNotification("Version restored"))
       .catch(() => showNotification("Restored locally"))
-      .finally(() => setIsSyncing(false));
+      .finally(() => setIsBlockingSync(false));
   };
 
   const handleToggleAutoUpdate = async (fileId: string) => {
@@ -571,11 +578,10 @@ export function App() {
     const newState = !file.autoUpdateEnabled;
     const updatedFile = { ...file, autoUpdateEnabled: newState };
 
-    // Optimistic Toggle
     setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
     showNotification(`AI Auto-Update ${newState ? 'Enabled' : 'Disabled'}`);
 
-    setIsSyncing(true);
+    setIsSyncing(true); // Configuration change, background sync is fine
     StorageService.uploadFile(user.id, updatedFile)
       .catch(() => {})
       .finally(() => setIsSyncing(false));
@@ -585,12 +591,14 @@ export function App() {
     if (user) {
       const updatedUser = { ...user, tier: tier, autoUpdateInterval: 14 };
       setUser(updatedUser);
-      // Persist upgrade
+      setIsBlockingSync(true); // Critical profile update
       try {
         await StorageService.saveUserProfile(updatedUser);
         showNotification(`Successfully upgraded to ${tier} plan!`);
       } catch (error) {
         showNotification(`Upgraded to ${tier} (Offline mode).`);
+      } finally {
+        setIsBlockingSync(false);
       }
     }
   };
@@ -599,7 +607,6 @@ export function App() {
     if (user) {
       const updatedUser = { ...user, autoUpdateInterval: parseInt(e.target.value) };
       setUser(updatedUser);
-      // Ensure this setting is persisted to DB
       setIsSyncing(true);
       StorageService.saveUserProfile(updatedUser)
         .then(() => showNotification("Settings saved"))
@@ -905,7 +912,19 @@ export function App() {
   const selectedFile = files.find(f => f.id === selectedFileId);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-200">
+    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-200 relative">
+      {/* GLOBAL BLOCKING OVERLAY */}
+      {isBlockingSync && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200 cursor-wait">
+            <div className="relative">
+                <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 rounded-full animate-pulse"></div>
+                <Loader2 className="w-16 h-16 text-blue-500 animate-spin relative z-10" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mt-8 mb-2">Syncing Data...</h2>
+            <p className="text-slate-400 max-w-xs text-center">Please wait while we secure your documents with the cloud database.</p>
+        </div>
+      )}
+
       {notification && (
         <div className="fixed top-20 right-4 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-right-4 flex items-center gap-3 border border-white/10">
           <Mail size={18} className="text-blue-400" />
@@ -913,8 +932,8 @@ export function App() {
         </div>
       )}
       
-      {/* Background Sync Indicator */}
-      {isSyncing && (
+      {/* Background Sync Indicator (Non-blocking) */}
+      {isSyncing && !isBlockingSync && (
          <div className="fixed bottom-4 right-4 bg-slate-800/80 backdrop-blur text-slate-400 px-4 py-2 rounded-full border border-white/5 text-xs flex items-center gap-2 z-50 animate-pulse">
            <Cloud size={14} className="text-blue-400" />
            Syncing changes...
@@ -964,31 +983,29 @@ export function App() {
               </div>
             </div>
             
-            <div className="flex gap-3">
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
-                accept=".doc,.docx,.txt,.md"
-              />
-              <Button variant="outline" onClick={handleUploadClick}>
-                <Upload size={20} className="mr-2" />
-                Upload File ({files.length}/{getMaxFiles(user.tier) === Infinity ? '∞' : getMaxFiles(user.tier)})
-              </Button>
-              <Button onClick={handleStartConnectDrive}>
-                <Plus size={20} className="mr-2" />
-                Connect Google Drive
-              </Button>
-            </div>
+            {/* conditionally render upload/connect buttons only if files exist */}
+            {files.length > 0 && (
+              <div className="flex gap-3">
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                  accept=".doc,.docx,.txt,.md"
+                />
+                <Button variant="outline" onClick={handleUploadClick}>
+                  <Upload size={20} className="mr-2" />
+                  Upload File ({files.length}/{getMaxFiles(user.tier) === Infinity ? '∞' : getMaxFiles(user.tier)})
+                </Button>
+                <Button onClick={handleStartConnectDrive}>
+                  <Plus size={20} className="mr-2" />
+                  Connect Google Drive
+                </Button>
+              </div>
+            )}
           </div>
 
-          {isDataLoading ? (
-            <div className="flex flex-col items-center justify-center py-24 text-slate-500">
-              <Loader2 size={48} className="animate-spin mb-4" />
-              <p>Syncing with Cloud Storage...</p>
-            </div>
-          ) : files.length === 0 ? (
+          {files.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 px-4 text-center rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30">
               <div className="bg-slate-800/50 p-6 rounded-full mb-6 ring-1 ring-white/10">
                 <Upload size={48} className="text-slate-500" strokeWidth={1.5} />
@@ -998,6 +1015,13 @@ export function App() {
                 Upload your documents or connect Google Drive to start analyzing them with AI.
               </p>
               <div className="flex gap-4">
+                 <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                  accept=".doc,.docx,.txt,.md"
+                 />
                  <Button onClick={handleUploadClick} size="lg">
                     <Upload size={20} className="mr-2" />
                     Upload File

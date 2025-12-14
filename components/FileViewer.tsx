@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DocFile, FileVersion, ChatMessage, User } from '../types';
-import { ArrowLeft, Clock, Save, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType, Lock, ToggleLeft, ToggleRight, BrainCircuit, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Clock, Save, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType, Lock, ToggleLeft, ToggleRight, BrainCircuit, ChevronRight, ChevronLeft, Sidebar, Type, Minus, Plus } from 'lucide-react';
 import { Button } from './Button';
 import { generateChatResponse } from '../services/geminiService';
 
@@ -18,9 +18,13 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false); // Default hidden now to allow toggle
   const [isAiMinimized, setIsAiMinimized] = useState(false);
   
+  // Font Options State
+  const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'mono'>('serif');
+  const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base');
+
   // Editing State
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
@@ -40,7 +44,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
   };
   const maxEdits = getMaxEdits(user.tier);
   const canEdit = user.editsUsed < maxEdits;
-  const editLimitReached = user.editsUsed >= maxEdits;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -122,10 +125,26 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
     }
   };
 
+  // Font Classes
+  const getFontClass = () => {
+     if (fontFamily === 'mono') return 'font-mono';
+     if (fontFamily === 'sans') return 'font-sans';
+     return 'font-serif';
+  };
+
+  const getSizeClass = () => {
+     if (fontSize === 'sm') return 'text-sm leading-relaxed';
+     if (fontSize === 'lg') return 'text-lg leading-relaxed';
+     if (fontSize === 'xl') return 'text-xl leading-relaxed';
+     return 'text-base leading-relaxed';
+  };
+
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col md:flex-row overflow-hidden bg-slate-950">
       <div className="flex-1 flex flex-col h-full min-w-0">
-        <div className="h-16 border-b border-white/10 px-4 flex items-center justify-between bg-slate-900/50 shrink-0 backdrop-blur-sm">
+        
+        {/* Main Header */}
+        <div className="h-16 border-b border-white/10 px-4 flex items-center justify-between bg-slate-900/50 shrink-0 backdrop-blur-sm z-20">
           <div className="flex items-center gap-3 overflow-hidden">
             <button onClick={onBack} className="p-2 hover:bg-white/5 rounded-full text-slate-400 transition-colors">
               <ArrowLeft size={20} />
@@ -158,7 +177,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
           <div className="flex items-center gap-2">
              {!isHistoricalView && !isEditing && (
                <>
-                 {/* Auto-Update Toggle */}
                  <div className="hidden sm:flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-white/5 mr-2">
                     <BrainCircuit size={16} className={file.autoUpdateEnabled ? "text-purple-400" : "text-slate-500"} />
                     <div className="flex flex-col">
@@ -204,21 +222,63 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
                  </Button>
                </>
              )}
+             
+             {/* Desktop History Toggle */}
+             <button 
+               onClick={() => setShowHistory(!showHistory)}
+               className={`hidden md:flex p-2 rounded-lg transition-colors items-center gap-2 text-sm font-medium ${showHistory ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+               title="Toggle Version History"
+             >
+               <Clock size={20} />
+             </button>
 
+             {/* Mobile History Toggle */}
              <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)} className="md:hidden">
                <Clock size={20} />
              </Button>
           </div>
         </div>
 
+        {/* Formatting Toolbar (Google Docs Style) */}
+        <div className="h-10 border-b border-white/5 bg-slate-900 px-4 flex items-center gap-4 text-slate-400">
+           <div className="flex items-center gap-2 border-r border-white/10 pr-4">
+              <Type size={16} />
+              <select 
+                value={fontFamily} 
+                onChange={(e) => setFontFamily(e.target.value as any)}
+                className="bg-transparent text-sm focus:outline-none text-slate-300 cursor-pointer hover:text-white"
+              >
+                <option value="serif">Merriweather (Serif)</option>
+                <option value="sans">Inter (Sans)</option>
+                <option value="mono">JetBrains (Mono)</option>
+              </select>
+           </div>
+           
+           <div className="flex items-center gap-2">
+              <span className="text-xs uppercase font-bold tracking-wider">Size</span>
+              <button onClick={() => setFontSize('sm')} className={`p-1 rounded hover:bg-white/10 ${fontSize === 'sm' ? 'text-blue-400' : ''}`}><Minus size={14} /></button>
+              <select 
+                value={fontSize} 
+                onChange={(e) => setFontSize(e.target.value as any)}
+                className="bg-transparent text-sm focus:outline-none text-slate-300 cursor-pointer hover:text-white w-16 text-center"
+              >
+                <option value="sm">Small</option>
+                <option value="base">Normal</option>
+                <option value="lg">Large</option>
+                <option value="xl">Huge</option>
+              </select>
+              <button onClick={() => setFontSize('lg')} className={`p-1 rounded hover:bg-white/10 ${fontSize === 'lg' ? 'text-blue-400' : ''}`}><Plus size={14} /></button>
+           </div>
+        </div>
+
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 bg-slate-950 overflow-y-auto p-8 border-r border-white/5 custom-scrollbar">
-            {/* Lighter Document Container */}
-            <div className={`max-w-3xl mx-auto bg-white shadow-2xl border border-white/5 min-h-[800px] rounded-sm text-slate-900 ${isEditing ? 'p-0 overflow-hidden ring-2 ring-blue-500/50' : 'p-8 md:p-12'}`}>
+            {/* Document Container with dynamic font classes */}
+            <div className={`max-w-3xl mx-auto bg-white shadow-2xl border border-white/5 min-h-[800px] rounded-sm text-slate-900 ${isEditing ? 'p-0 overflow-hidden ring-2 ring-blue-500/50' : 'p-8 md:p-12'} transition-all duration-300`}>
               
               {isEditing ? (
                 <textarea 
-                  className="w-full h-full min-h-[800px] p-8 md:p-12 resize-none focus:outline-none font-serif text-slate-900 leading-relaxed text-base bg-white"
+                  className={`w-full h-full min-h-[800px] p-8 md:p-12 resize-none focus:outline-none bg-white text-slate-900 ${getFontClass()} ${getSizeClass()}`}
                   value={editedContent}
                   onChange={(e) => setEditedContent(e.target.value)}
                   placeholder="Start typing..."
@@ -229,14 +289,14 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
                   {file.type === 'sheet' ? (
                     <div className="grid grid-cols-4 gap-0 border-t border-l border-slate-300">
                       {[...Array(20)].map((_, i) => (
-                        <div key={i} className="border-b border-r border-slate-300 p-2 text-sm h-10 truncate bg-white text-slate-900">
+                        <div key={i} className="border-b border-r border-slate-300 p-2 text-sm h-10 truncate bg-white text-slate-900 font-sans">
                             {i < 4 ? <span className="font-bold bg-slate-50 block -m-2 p-2 text-slate-600">{['A','B','C','D'][i]}</span> : 
                             (displayContent.split('\n')[i] || '')}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="prose prose-slate max-w-none whitespace-pre-wrap font-serif text-slate-900 leading-relaxed">
+                    <div className={`prose prose-slate max-w-none whitespace-pre-wrap text-slate-900 ${getFontClass()} ${getSizeClass()}`}>
                       {displayContent}
                     </div>
                   )}
@@ -246,7 +306,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
           </div>
 
           {/* Minimizable AI Chat */}
-          <div className={`${isAiMinimized ? 'w-14' : 'w-96'} bg-slate-900 flex flex-col border-l border-white/5 shadow-xl transition-all duration-300`}>
+          <div className={`${isAiMinimized ? 'w-14' : 'w-96'} bg-slate-900 flex flex-col border-l border-white/5 shadow-xl transition-all duration-300 z-10`}>
             <div className={`p-4 border-b border-white/5 bg-slate-900/50 flex items-center ${isAiMinimized ? 'justify-center' : 'justify-between'}`}>
               {!isAiMinimized && (
                 <div className="flex items-center gap-2">
@@ -321,15 +381,21 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
         </div>
       </div>
 
+      {/* Collapsible History Tab */}
       {showHistory && (
-        <div className="w-80 bg-slate-900 border-l border-white/5 flex flex-col shrink-0 h-full absolute md:relative z-20 right-0 shadow-2xl md:shadow-none transition-transform duration-300">
+        <div className="w-80 bg-slate-900 border-l border-white/5 flex flex-col shrink-0 h-full absolute md:relative z-20 right-0 shadow-2xl md:shadow-none animate-in slide-in-from-right duration-300">
           <div className="p-4 border-b border-white/5 bg-slate-900 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="text-slate-500" size={18} />
               <h3 className="font-semibold text-slate-200">Version History</h3>
             </div>
-            <div className="bg-blue-900/30 text-blue-400 text-xs font-bold px-2 py-1 rounded-full border border-blue-800/30">
-              {file.versions.length} Updates
+            <div className="flex items-center gap-2">
+                <div className="bg-blue-900/30 text-blue-400 text-xs font-bold px-2 py-1 rounded-full border border-blue-800/30">
+                {file.versions.length} Updates
+                </div>
+                <button onClick={() => setShowHistory(false)} className="md:hidden text-slate-500 hover:text-white">
+                    <X size={18} />
+                </button>
             </div>
           </div>
           
