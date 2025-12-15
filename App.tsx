@@ -8,7 +8,7 @@ import { FilePicker } from './components/FilePicker';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { EmailVerification } from './components/EmailVerification';
 import { User, DocFile, ViewState, FileVersion, SubscriptionTier } from './types';
-import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check, Loader2, Cloud, CloudOff } from 'lucide-react';
+import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check, Loader2, Cloud, ChevronRight } from 'lucide-react';
 import { auth } from './services/firebase';
 import { StorageService } from './services/storage';
 
@@ -34,8 +34,8 @@ export function App() {
   const [notification, setNotification] = useState<string | null>(null);
   
   // Sync States
-  const [isSyncing, setIsSyncing] = useState(false); // For background tasks (Auto-save)
-  const [isBlockingSync, setIsBlockingSync] = useState(false); // For critical tasks (Initial load, Upload, Manual Save)
+  const [isSyncing, setIsSyncing] = useState(false); 
+  const [isBlockingSync, setIsBlockingSync] = useState(false);
 
   const [showSubscription, setShowSubscription] = useState(false);
 
@@ -72,13 +72,10 @@ export function App() {
             return curr;
         });
         
-        // Start Blocking Sync for Initial Data Load
         setIsBlockingSync(true);
 
         try {
           const userId = firebaseUser.uid;
-          
-          // 1. Fetch User Profile
           let currentUser = await StorageService.getUserProfile(userId);
           
           if (!currentUser) {
@@ -93,10 +90,7 @@ export function App() {
             };
             await StorageService.saveUserProfile(currentUser);
           }
-          
           setUser(currentUser);
-
-          // 2. Fetch Files List
           const userFiles = await StorageService.getUserFiles(userId);
           setFiles(userFiles);
 
@@ -149,7 +143,6 @@ export function App() {
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // Authentication Handlers
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -330,7 +323,7 @@ export function App() {
     setView(ViewState.DASHBOARD);
     showNotification(`Importing "${driveFile.name}"...`);
     
-    setIsBlockingSync(true); // BLOCKING
+    setIsBlockingSync(true); 
     StorageService.uploadFile(user.id, newFile)
       .then(() => showNotification(`Imported "${driveFile.name}" successfully`))
       .catch(() => showNotification("Saved locally (Sync pending)"))
@@ -388,10 +381,8 @@ export function App() {
         autoUpdateEnabled: true
       };
 
-      // 1. Optimistic UI Update
       setFiles(prev => [...prev, newFile]);
       
-      // 2. Cloud Sync (Blocking)
       setIsBlockingSync(true); 
       StorageService.uploadFile(user.id, newFile)
         .then(() => showNotification("Upload complete."))
@@ -401,7 +392,6 @@ export function App() {
         })
         .finally(() => setIsBlockingSync(false));
 
-      // 3. Reset Input
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
@@ -418,7 +408,7 @@ export function App() {
     if (!file || !user) return;
 
     if (file._isLite || !file.currentContent) {
-      setIsBlockingSync(true); // Blocking load for content to ensure consistency
+      setIsBlockingSync(true); 
       try {
         const fullFile = await StorageService.loadFullFile(user.id, id);
         if (fullFile) {
@@ -442,7 +432,6 @@ export function App() {
     e.stopPropagation(); 
     if (!user) return;
     
-    // Optimistic Delete
     setFiles(prevFiles => prevFiles.filter(f => f.id !== fileId));
     if (selectedFileId === fileId) {
       setSelectedFileId(null);
@@ -492,7 +481,6 @@ export function App() {
       versionLabel: versionLabel
     };
 
-    // HISTORY LIMIT: Keep only last 10 versions
     let updatedVersions = [...currentVersions, newVersion];
     if (updatedVersions.length > 10) {
         updatedVersions = updatedVersions.slice(updatedVersions.length - 10);
@@ -508,7 +496,6 @@ export function App() {
 
     setFiles(prevFiles => prevFiles.map(file => file.id === fileId ? updatedFile : file));
     
-    // Logic: Manual saves are BLOCKING. Auto-saves are BACKGROUND.
     if (!isAutoSave) {
         setIsBlockingSync(true);
     } else {
@@ -545,7 +532,6 @@ export function App() {
       versionLabel: `Pre-Restore Backup`
     };
 
-    // HISTORY LIMIT: Keep only last 10 versions even on restore
     let updatedVersions = [...file.versions, backupVersion];
     if (updatedVersions.length > 10) {
         updatedVersions = updatedVersions.slice(updatedVersions.length - 10);
@@ -562,7 +548,7 @@ export function App() {
     setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
     showNotification(`Restoring version...`);
 
-    setIsBlockingSync(true); // BLOCKING
+    setIsBlockingSync(true); 
     StorageService.uploadFile(user.id, updatedFile)
       .then(() => showNotification("Version restored"))
       .catch(() => showNotification("Restored locally"))
@@ -581,7 +567,7 @@ export function App() {
     setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
     showNotification(`AI Auto-Update ${newState ? 'Enabled' : 'Disabled'}`);
 
-    setIsSyncing(true); // Configuration change, background sync is fine
+    setIsSyncing(true);
     StorageService.uploadFile(user.id, updatedFile)
       .catch(() => {})
       .finally(() => setIsSyncing(false));
@@ -591,7 +577,7 @@ export function App() {
     if (user) {
       const updatedUser = { ...user, tier: tier, autoUpdateInterval: 14 };
       setUser(updatedUser);
-      setIsBlockingSync(true); // Critical profile update
+      setIsBlockingSync(true); 
       try {
         await StorageService.saveUserProfile(updatedUser);
         showNotification(`Successfully upgraded to ${tier} plan!`);
@@ -617,21 +603,11 @@ export function App() {
 
   const getFileIcon = (type: string) => {
     switch (type) {
-      case 'sheet': return <FileSpreadsheet size={24} />;
-      case 'text': return <FileType size={24} />;
-      default: return <FileText size={24} />;
+      case 'sheet': return <FileSpreadsheet size={20} />;
+      case 'text': return <FileType size={20} />;
+      default: return <FileText size={20} />;
     }
   };
-
-  const getFileColor = (type: string) => {
-    switch (type) {
-      case 'sheet': return 'bg-green-900/30 text-green-400';
-      case 'text': return 'bg-slate-800 text-slate-400';
-      default: return 'bg-blue-900/30 text-blue-400';
-    }
-  };
-
-  // View Logic
 
   if (view === ViewState.GOOGLE_SIGNIN) {
     return (
@@ -662,61 +638,51 @@ export function App() {
 
   if (view === ViewState.AUTH) {
     return (
-      <div className="min-h-screen bg-slate-950 flex font-sans">
+      <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 flex font-sans text-zinc-900 dark:text-zinc-200 transition-colors duration-200">
         {notification && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-4 border border-white/10 flex items-center gap-2">
-            <Mail size={16} className="text-blue-400" />
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-zinc-800 text-white px-6 py-3 rounded-md shadow-lg z-50 animate-in fade-in slide-in-from-top-4 border border-white/10 flex items-center gap-2">
+            <Mail size={16} className="text-indigo-400" />
             {notification}
           </div>
         )}
 
-        {/* Left Side - Hero (Hidden on Mobile) */}
-        <div className="hidden lg:flex lg:w-1/2 bg-slate-900 relative overflow-hidden items-center justify-center p-12 border-r border-white/5">
-           {/* Animated Gradient Background */}
-           <div className="absolute inset-0 bg-slate-900">
-               <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] animate-pulse"></div>
-               <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[100px] animate-pulse delay-1000"></div>
+        {/* Left Side - Hero */}
+        <div className="hidden lg:flex lg:w-1/2 bg-zinc-50 dark:bg-zinc-900 relative overflow-hidden items-center justify-center p-12 border-r border-zinc-200 dark:border-zinc-800 transition-colors duration-200">
+           {/* Professional Subtle Gradient */}
+           <div className="absolute inset-0 bg-white dark:bg-zinc-900">
+               <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-[120px]"></div>
+               <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[120px]"></div>
            </div>
            
            <div className="relative z-10 max-w-lg">
-               <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-8 shadow-2xl shadow-blue-900/30">
-                   <BrainCircuit className="text-white w-8 h-8" />
+               <div className="w-12 h-12 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center justify-center mb-8 shadow-xl">
+                   <BrainCircuit className="text-indigo-600 dark:text-indigo-500 w-6 h-6" />
                </div>
-               <h1 className="text-5xl font-bold text-white mb-6 leading-tight tracking-tight">
-                   SynapseSync<span className="text-blue-500">.AI</span>
+               <h1 className="text-4xl font-bold text-zinc-900 dark:text-white mb-6 leading-tight tracking-tight font-lato">
+                   Synapse<span className="text-zinc-400 dark:text-zinc-500">Sync</span> Enterprise
                </h1>
-               <p className="text-xl text-slate-400 mb-10 leading-relaxed">
-                   Elevate your documentation with intelligent AI analysis, seamless version control, and real-time collaboration tools.
+               <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-10 leading-relaxed font-light">
+                   The next generation of document intelligence. Secure, versioned, and AI-enhanced workflow management.
                </p>
                
-               <div className="space-y-8">
-                   <div className="flex items-start gap-4 group">
-                       <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-blue-500/50 group-hover:bg-blue-900/20 transition-all">
-                           <Sparkles className="text-blue-400 w-6 h-6 group-hover:scale-110 transition-transform" />
+               <div className="space-y-6">
+                   <div className="flex items-start gap-4">
+                       <div className="w-10 h-10 rounded bg-white dark:bg-zinc-800/50 flex items-center justify-center shrink-0 border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                           <Sparkles className="text-indigo-500 dark:text-indigo-400 w-5 h-5" />
                        </div>
                        <div>
-                           <h3 className="font-semibold text-white text-lg mb-1">AI-Powered Insights</h3>
-                           <p className="text-slate-400">Instantly chat with your documents to extract summaries, insights, and answers.</p>
+                           <h3 className="font-medium text-zinc-900 dark:text-white text-base mb-1">Deep Learning Analysis</h3>
+                           <p className="text-sm text-zinc-600 dark:text-zinc-500">Context-aware insights across your entire knowledge base.</p>
                        </div>
                    </div>
                    
-                   <div className="flex items-start gap-4 group">
-                        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-purple-500/50 group-hover:bg-purple-900/20 transition-all">
-                           <Clock className="text-purple-400 w-6 h-6 group-hover:scale-110 transition-transform" />
+                   <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded bg-white dark:bg-zinc-800/50 flex items-center justify-center shrink-0 border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                           <Clock className="text-emerald-500 dark:text-emerald-400 w-5 h-5" />
                        </div>
                        <div>
-                           <h3 className="font-semibold text-white text-lg mb-1">Time Travel</h3>
-                           <p className="text-slate-400">Automated version snapshots allow you to restore any point in history effortlessly.</p>
-                       </div>
-                   </div>
-
-                   <div className="flex items-start gap-4 group">
-                        <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-green-500/50 group-hover:bg-green-900/20 transition-all">
-                           <ShieldCheck className="text-green-400 w-6 h-6 group-hover:scale-110 transition-transform" />
-                       </div>
-                       <div>
-                           <h3 className="font-semibold text-white text-lg mb-1">Secure & Private</h3>
-                           <p className="text-slate-400">Enterprise-grade security ensures your intellectual property remains protected.</p>
+                           <h3 className="font-medium text-zinc-900 dark:text-white text-base mb-1">Granular Versioning</h3>
+                           <p className="text-sm text-zinc-600 dark:text-zinc-500">Restore points with millisecond precision and full audit logs.</p>
                        </div>
                    </div>
                </div>
@@ -724,78 +690,61 @@ export function App() {
         </div>
 
         {/* Right Side - Auth Form */}
-        <div className="flex-1 flex items-center justify-center p-4 lg:p-12 relative overflow-hidden">
-            {/* Mobile Background decoration */}
-            <div className="absolute top-[-20%] right-[-20%] w-[300px] h-[300px] bg-blue-600/20 rounded-full blur-3xl lg:hidden"></div>
-            
-            <div className="w-full max-w-md z-10">
-               {/* Mobile Header */}
-               <div className="lg:hidden text-center mb-10">
-                   <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl mb-6 shadow-lg">
-                      <BrainCircuit className="text-white w-7 h-7" />
-                   </div>
-                   <h2 className="text-3xl font-bold text-white">SynapseSync.AI</h2>
-                   <p className="text-slate-400 mt-2">Intelligent Document Management</p>
-               </div>
-
-               <div className="bg-slate-900/80 p-8 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md">
-                   {/* Auth View */}
+        <div className="flex-1 flex items-center justify-center p-4 lg:p-12">
+            <div className="w-full max-w-[380px] z-10">
+               <div className="bg-white dark:bg-zinc-900 p-8 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-xl transition-all duration-200">
                    {isForgotPassword ? (
                       <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                         {isResetSuccess ? (
                           <div className="text-center">
-                            <div className="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto mb-6 ring-1 ring-green-500/50">
-                              <Check size={32} />
+                            <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                              <Check size={24} />
                             </div>
-                            <h2 className="text-2xl font-bold text-white mb-2">Check your inbox</h2>
-                            <p className="text-slate-400 mb-8">
-                              We sent you a password change link to <br/>
-                              <span className="text-white font-medium">{email}</span>
+                            <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Check your inbox</h2>
+                            <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-6">
+                              We sent a recovery link to <span className="text-zinc-900 dark:text-white font-medium">{email}</span>
                             </p>
                             <Button 
                               onClick={handleBackToLogin}
                               className="w-full"
-                              size="lg"
+                              size="md"
                             >
-                              Sign In
+                              Return to Login
                             </Button>
                           </div>
                         ) : (
                           <>
                             <button 
                               onClick={handleBackToLogin}
-                              className="flex items-center text-sm text-slate-500 hover:text-white mb-6 transition-colors"
+                              className="flex items-center text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-white mb-6 transition-colors"
                             >
-                              <ArrowLeft size={16} className="mr-1" /> Back
+                              <ArrowLeft size={14} className="mr-1" /> BACK
                             </button>
                             
-                            <h2 className="text-2xl font-bold text-white mb-2">Reset Password</h2>
-                            <p className="text-slate-400 mb-8">
-                              Enter your email address and we'll send you a link to reset your password.
+                            <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Reset Password</h2>
+                            <p className="text-zinc-600 dark:text-zinc-500 text-sm mb-6">
+                              Enter your email to receive recovery instructions.
                             </p>
                             
-                            <form onSubmit={handleSendResetLink} className="space-y-5">
-                              <div className="space-y-1">
-                                <Input 
-                                  label="Email Address" 
-                                  type="email" 
-                                  placeholder="you@company.com" 
-                                  value={email}
-                                  onChange={e => setEmail(e.target.value)}
-                                  required
-                                  className="bg-slate-950 border-slate-800 focus:bg-slate-900"
-                                  disabled={isAuthLoading}
-                                  autoFocus
-                                />
-                              </div>
-                              
+                            <form onSubmit={handleSendResetLink} className="space-y-4">
+                              <Input 
+                                label="Work Email" 
+                                type="email" 
+                                placeholder="name@company.com" 
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                required
+                                className="placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+                                disabled={isAuthLoading}
+                                autoFocus
+                              />
                               <Button 
                                 type="submit" 
                                 isLoading={isAuthLoading}
-                                className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" 
-                                size="lg"
+                                className="w-full mt-2" 
+                                size="md"
                               >
-                                Get Reset Link
+                                Send Link
                               </Button>
                             </form>
                           </>
@@ -803,27 +752,25 @@ export function App() {
                       </div>
                    ) : (
                      <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                       <h2 className="text-2xl font-bold text-white mb-2">
-                         {isRegistering ? 'Create an Account' : 'Welcome Back'}
+                       <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-1">
+                         {isRegistering ? 'Create Account' : 'Welcome Back'}
                        </h2>
-                       <p className="text-slate-400 mb-8">
-                           {isRegistering ? 'Start your journey with AI-powered docs.' : 'Sign in to access your workspace.'}
+                       <p className="text-zinc-600 dark:text-zinc-500 text-sm mb-8">
+                           {isRegistering ? 'Initialize your workspace.' : 'Enter your credentials to access.'}
                        </p>
                        
-                       <form onSubmit={handleAuth} className="space-y-5">
-                         <div className="space-y-1">
-                           <Input 
-                             label="Email Address" 
+                       <form onSubmit={handleAuth} className="space-y-4">
+                         <Input 
+                             label="Email" 
                              type="email" 
-                             placeholder="you@company.com" 
+                             placeholder="name@company.com" 
                              value={email}
                              onChange={e => setEmail(e.target.value)}
                              required
-                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                             className="placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                              disabled={isAuthLoading}
-                           />
-                         </div>
-                         <div className="space-y-1">
+                         />
+                         <div>
                            <Input 
                              label="Password" 
                              type="password" 
@@ -831,24 +778,23 @@ export function App() {
                              value={password}
                              onChange={e => setPassword(e.target.value)}
                              required
-                             className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                             className="placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                              disabled={isAuthLoading}
                            />
                            {!isRegistering && (
-                             <div className="flex justify-end pt-1">
+                             <div className="flex justify-end pt-1.5">
                                <button 
                                  type="button"
                                  onClick={handleShowForgotPassword}
-                                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                                 className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors"
                                >
-                                 Forgot Password?
+                                 Forgot password?
                                </button>
                              </div>
                            )}
                          </div>
   
                          {isRegistering && (
-                            <div className="space-y-1">
                               <Input 
                                 label="Confirm Password" 
                                 type="password" 
@@ -856,36 +802,34 @@ export function App() {
                                 value={confirmPassword}
                                 onChange={e => setConfirmPassword(e.target.value)}
                                 required
-                                className="bg-slate-950 border-slate-800 focus:bg-slate-900"
+                                className="placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                                 disabled={isAuthLoading}
                               />
-                            </div>
                          )}
                          
                          <Button 
                           type="submit" 
                           isLoading={isAuthLoading}
-                          className="w-full py-3 mt-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-none shadow-lg shadow-blue-900/20" 
-                          size="lg"
+                          className="w-full mt-2" 
+                          size="md"
                          >
                            {isRegistering ? 'Sign Up' : 'Sign In'}
                          </Button>
                        </form>
   
-                       <div className="mt-8 pt-6 border-t border-white/5 text-center">
-                         <p className="text-slate-500 text-sm mb-3">
-                            {isRegistering ? 'Already have an account?' : "Don't have an account?"}
+                       <div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-800 text-center">
+                         <p className="text-zinc-600 dark:text-zinc-500 text-xs mb-3">
+                            {isRegistering ? 'Existing user?' : "New to SynapseSync?"}
                          </p>
                          <button 
                            onClick={() => {
                              setIsRegistering(!isRegistering);
                              setNotification(null);
                            }}
-                           className="text-white font-medium hover:text-blue-400 transition-colors border border-white/10 bg-white/5 px-6 py-2 rounded-lg hover:bg-white/10 w-full"
-                           title={isRegistering ? 'Switch to Sign In' : 'Switch to Sign Up'}
+                           className="text-zinc-800 dark:text-zinc-300 text-sm hover:text-indigo-600 dark:hover:text-white transition-colors font-medium"
                            disabled={isAuthLoading}
                          >
-                           {isRegistering ? 'Sign In to Existing Account' : 'Create New Account'}
+                           {isRegistering ? 'Log in here' : 'Create an account'}
                          </button>
                        </div>
                      </div>
@@ -897,13 +841,12 @@ export function App() {
     );
   }
 
-  // --- LOADING STATE (Prevent Black Screen) ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center">
          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-            <p className="text-slate-400 text-lg animate-pulse">Initializing SynapseSync...</p>
+            <Loader2 className="w-8 h-8 text-indigo-600 dark:text-indigo-500 animate-spin" />
+            <p className="text-zinc-600 dark:text-zinc-500 text-sm font-medium animate-pulse tracking-wide">INITIALIZING SYSTEM...</p>
          </div>
       </div>
     );
@@ -912,31 +855,26 @@ export function App() {
   const selectedFile = files.find(f => f.id === selectedFileId);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-200 relative">
+    <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 flex flex-col text-zinc-900 dark:text-zinc-200 relative font-sans transition-colors duration-200">
       {/* GLOBAL BLOCKING OVERLAY */}
       {isBlockingSync && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200 cursor-wait">
-            <div className="relative">
-                <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 rounded-full animate-pulse"></div>
-                <Loader2 className="w-16 h-16 text-blue-500 animate-spin relative z-10" />
-            </div>
-            <h2 className="text-2xl font-bold text-white mt-8 mb-2">Syncing Data...</h2>
-            <p className="text-slate-400 max-w-xs text-center">Please wait while we secure your documents with the cloud database.</p>
+        <div className="fixed inset-0 z-[100] bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm flex flex-col items-center justify-center cursor-wait">
+            <Loader2 className="w-10 h-10 text-indigo-600 dark:text-indigo-500 animate-spin mb-4" />
+            <p className="text-zinc-600 dark:text-zinc-400 text-sm tracking-widest font-medium uppercase">Synchronizing</p>
         </div>
       )}
 
       {notification && (
-        <div className="fixed top-20 right-4 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-right-4 flex items-center gap-3 border border-white/10">
-          <Mail size={18} className="text-blue-400" />
-          {notification}
+        <div className="fixed top-20 right-4 bg-zinc-800 text-white px-5 py-3 rounded shadow-lg z-50 animate-in fade-in slide-in-from-right-4 flex items-center gap-3 border border-zinc-700">
+          <Mail size={16} className="text-indigo-400" />
+          <span className="text-sm">{notification}</span>
         </div>
       )}
       
-      {/* Background Sync Indicator (Non-blocking) */}
       {isSyncing && !isBlockingSync && (
-         <div className="fixed bottom-4 right-4 bg-slate-800/80 backdrop-blur text-slate-400 px-4 py-2 rounded-full border border-white/5 text-xs flex items-center gap-2 z-50 animate-pulse">
-           <Cloud size={14} className="text-blue-400" />
-           Syncing changes...
+         <div className="fixed bottom-4 right-4 bg-white/90 dark:bg-zinc-900/90 backdrop-blur text-zinc-600 dark:text-zinc-400 px-3 py-1.5 rounded border border-zinc-200 dark:border-zinc-800 text-xs flex items-center gap-2 z-50 shadow-sm">
+           <Cloud size={12} className="text-indigo-500 animate-pulse" />
+           Syncing...
          </div>
       )}
 
@@ -957,23 +895,23 @@ export function App() {
 
       {view === ViewState.DASHBOARD && user && (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-white">My Files</h1>
-              <p className="text-slate-400 mt-1">Manage and chat with your documents</p>
+              <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Documents</h1>
+              <p className="text-zinc-600 dark:text-zinc-500 text-sm mt-1">Manage your secure file repository.</p>
               
               {/* Loop Interval Display/Selector */}
-              <div className="mt-3 inline-flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-                <RefreshCw size={14} className="text-slate-500" />
-                <span className="text-xs font-medium text-slate-400">Auto-Update Loop:</span>
+              <div className="mt-4 inline-flex items-center gap-2">
+                <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-500 uppercase tracking-widest">Auto-Update Cycle</span>
+                <div className="h-px w-8 bg-zinc-300 dark:bg-zinc-800"></div>
                 
                 {user.tier === 'FREE' ? (
-                  <span className="text-xs font-bold text-slate-200">14 Days (Fixed)</span>
+                  <span className="text-xs font-mono text-zinc-600 dark:text-zinc-300">14 Days (Locked)</span>
                 ) : (
                   <select 
                     value={user.autoUpdateInterval} 
                     onChange={handleLoopChange}
-                    className="bg-slate-800 text-xs font-bold text-slate-200 border border-slate-700 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="bg-white dark:bg-zinc-900 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-800 rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
                   >
                     {user.tier === 'PREMIUM' && <option value={7}>7 Days</option>}
                     <option value={14}>14 Days</option>
@@ -983,7 +921,6 @@ export function App() {
               </div>
             </div>
             
-            {/* conditionally render upload/connect buttons only if files exist */}
             {files.length > 0 && (
               <div className="flex gap-3">
                 <input 
@@ -993,28 +930,28 @@ export function App() {
                   className="hidden" 
                   accept=".doc,.docx,.txt,.md"
                 />
-                <Button variant="outline" onClick={handleUploadClick}>
-                  <Upload size={20} className="mr-2" />
-                  Upload File ({files.length}/{getMaxFiles(user.tier) === Infinity ? '∞' : getMaxFiles(user.tier)})
+                <Button variant="outline" onClick={handleUploadClick} size="sm">
+                  <Upload size={14} className="mr-2" />
+                  Upload
                 </Button>
-                <Button onClick={handleStartConnectDrive}>
-                  <Plus size={20} className="mr-2" />
-                  Connect Google Drive
+                <Button onClick={handleStartConnectDrive} size="sm" variant="secondary">
+                  <Plus size={14} className="mr-2" />
+                  Connect Drive
                 </Button>
               </div>
             )}
           </div>
 
           {files.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 px-4 text-center rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30">
-              <div className="bg-slate-800/50 p-6 rounded-full mb-6 ring-1 ring-white/10">
-                <Upload size={48} className="text-slate-500" strokeWidth={1.5} />
+            <div className="flex flex-col items-center justify-center py-32 px-4 text-center rounded-lg border border-dashed border-zinc-300 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/20">
+              <div className="bg-white dark:bg-zinc-900 p-4 rounded-full mb-6 ring-1 ring-zinc-200 dark:ring-zinc-800 shadow-xl">
+                <Upload size={32} className="text-zinc-400 dark:text-zinc-500" strokeWidth={1.5} />
               </div>
-              <h3 className="text-2xl font-bold text-white mb-3">No files found</h3>
-              <p className="text-slate-400 max-w-md mb-8 text-lg">
-                Upload your documents or connect Google Drive to start analyzing them with AI.
+              <h3 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">Repository Empty</h3>
+              <p className="text-zinc-600 dark:text-zinc-500 max-w-md mb-8 text-sm">
+                Initialize your workspace by uploading documents or connecting an external drive.
               </p>
-              <div className="flex gap-4">
+              <div className="flex gap-3">
                  <input 
                   type="file" 
                   ref={fileInputRef} 
@@ -1022,64 +959,70 @@ export function App() {
                   className="hidden" 
                   accept=".doc,.docx,.txt,.md"
                  />
-                 <Button onClick={handleUploadClick} size="lg">
-                    <Upload size={20} className="mr-2" />
+                 <Button onClick={handleUploadClick} size="md">
+                    <Upload size={16} className="mr-2" />
                     Upload File
                  </Button>
-                 <Button onClick={handleStartConnectDrive} variant="outline" size="lg">
-                    <Plus size={20} className="mr-2" />
+                 <Button onClick={handleStartConnectDrive} variant="outline" size="md">
+                    <Plus size={16} className="mr-2" />
                     Connect Drive
                  </Button>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {files.map(file => (
                 <div 
                   key={file.id}
                   onClick={() => handleSelectFile(file.id)}
-                  className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 hover:shadow-xl hover:border-blue-500/50 transition-all cursor-pointer group overflow-hidden"
+                  className="bg-white dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer group flex flex-col"
                 >
-                  <div className="p-5">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`p-3 rounded-lg ${getFileColor(file.type)}`}>
+                  <div className="p-4 flex-1">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`p-2 rounded ${
+                        file.type === 'sheet' 
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-500' 
+                        : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400'
+                      }`}>
                         {getFileIcon(file.type)}
                       </div>
-                      <div className="flex items-center gap-2">
-                        {(file.versions && file.versions.length > 0) && (
-                           <span className="bg-slate-800 text-slate-400 text-xs font-medium px-2 py-1 rounded-full border border-slate-700">
-                             {file.versions.length} versions
-                           </span>
-                        )}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           type="button"
                           onClick={(e) => handleDeleteFile(e, file.id)}
-                          className="relative z-10 p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                          title="Delete file"
+                          className="p-1.5 text-zinc-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          title="Delete"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
-                    <h3 className="font-semibold text-lg text-slate-200 mb-1 group-hover:text-blue-400 transition-colors truncate">
+                    
+                    <h3 className="font-semibold text-sm text-zinc-900 dark:text-zinc-200 mb-1 group-hover:text-indigo-600 dark:group-hover:text-white transition-colors truncate">
                       {file.title}
                     </h3>
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-sm text-slate-500">
-                        Updated {new Date(file.lastUpdated).toLocaleDateString()}
+                    
+                    <div className="flex items-center gap-3 mt-2">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500 font-mono">
+                        {new Date(file.lastUpdated).toLocaleDateString()}
                       </p>
-                      {file.autoUpdateEnabled && (
-                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-400 bg-green-900/20 px-1.5 py-0.5 rounded border border-green-900/30">
-                           <RefreshCw size={10} className="animate-spin-slow" /> AUTO
+                      {file.versions && file.versions.length > 0 && (
+                         <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
+                           v{file.versions.length + 1}
                          </span>
                       )}
                     </div>
                   </div>
-                  <div className="bg-slate-950/50 px-5 py-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                       <Lock size={12} /> Private
-                    </span>
-                    <span>Owner: {user.name}</span>
+                  
+                  <div className="px-4 py-2 border-t border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-500 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-md">
+                     <span className="flex items-center gap-1.5">
+                       <Lock size={10} /> ENCRYPTED
+                     </span>
+                     {file.autoUpdateEnabled && (
+                        <span className="text-emerald-600 dark:text-emerald-500 font-bold flex items-center gap-1">
+                          AI ACTIVE <RefreshCw size={10} />
+                        </span>
+                     )}
                   </div>
                 </div>
               ))}

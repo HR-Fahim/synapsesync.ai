@@ -19,8 +19,8 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onSuccess, onCancel }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-md p-8 border border-white/10 rounded-xl shadow-2xl bg-slate-900 text-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-md p-8 border border-zinc-200 dark:border-white/10 rounded-xl shadow-2xl bg-white dark:bg-slate-900 text-center transition-colors">
         <div className="flex justify-center mb-6">
           {/* Simple Google Logo approximation */}
           <svg className="w-12 h-12" viewBox="0 0 24 24">
@@ -43,19 +43,19 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onSuccess, onCancel }) =
           </svg>
         </div>
         
-        <h2 className="text-2xl font-medium text-white mb-2">Sign in with Google</h2>
-        <p className="text-slate-400 mb-8">Choose an account to continue to <span className="font-semibold text-slate-200">DocuMind</span></p>
+        <h2 className="text-2xl font-medium text-zinc-900 dark:text-white mb-2">Sign in with Google</h2>
+        <p className="text-zinc-600 dark:text-slate-400 mb-8">Choose an account to continue to <span className="font-semibold text-zinc-700 dark:text-slate-200">DocuMind</span></p>
 
         <div 
           onClick={handleSignIn}
-          className="group border border-slate-700 bg-slate-800/50 rounded-lg p-3 flex items-center gap-4 cursor-pointer hover:bg-slate-800 hover:border-blue-500/50 transition-all text-left mb-6"
+          className="group border border-zinc-200 dark:border-slate-700 bg-zinc-50 dark:bg-slate-800/50 rounded-lg p-3 flex items-center gap-4 cursor-pointer hover:bg-zinc-100 dark:hover:bg-slate-800 hover:border-blue-400 dark:hover:border-blue-500/50 transition-all text-left mb-6"
         >
-          <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-purple-900/50">
+          <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-purple-500/30 dark:shadow-purple-900/50">
             D
           </div>
           <div>
-            <p className="font-medium text-slate-200 text-sm">Demo User</p>
-            <p className="text-slate-500 text-xs">demo.user@example.com</p>
+            <p className="font-medium text-zinc-900 dark:text-slate-200 text-sm">Demo User</p>
+            <p className="text-zinc-600 dark:text-slate-500 text-xs">demo.user@example.com</p>
           </div>
         </div>
 
@@ -69,13 +69,13 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onSuccess, onCancel }) =
           </Button>
           <button 
             onClick={onCancel}
-            className="text-sm text-slate-500 hover:text-slate-300 font-medium"
+            className="text-sm text-zinc-500 hover:text-zinc-800 dark:text-slate-500 dark:hover:text-slate-300 font-medium"
           >
             Cancel
           </button>
         </div>
         
-        <div className="mt-8 text-xs text-slate-600">
+        <div className="mt-8 text-xs text-zinc-400 dark:text-slate-600">
           To continue, Google will share your name, email address, and language preference with DocuMind.
         </div>
       </div>

@@ -53,19 +53,19 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ currentTie
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 rounded-2xl shadow-2xl border border-white/10 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-slate-950/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-white/10 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] transition-colors">
+        <div className="p-6 border-b border-zinc-200 dark:border-white/10 flex justify-between items-center bg-zinc-50 dark:bg-slate-950/50">
           <div>
-            <h2 className="text-2xl font-bold text-white">Upgrade your Plan</h2>
-            <p className="text-slate-400">Choose the perfect plan for your document management needs</p>
+            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Upgrade your Plan</h2>
+            <p className="text-zinc-500 dark:text-slate-400">Choose the perfect plan for your document management needs</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
             <X size={24} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 bg-slate-950">
+        <div className="flex-1 overflow-y-auto p-8 bg-zinc-50 dark:bg-slate-950">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {plans.map((plan) => {
               const isCurrent = currentTier === plan.id;
@@ -74,12 +74,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ currentTie
               return (
                 <div 
                   key={plan.id}
-                  className={`relative bg-slate-900 rounded-2xl p-8 flex flex-col ${
+                  className={`relative bg-white dark:bg-slate-900 rounded-2xl p-8 flex flex-col ${
                     isCurrent 
-                      ? 'ring-2 ring-blue-600 shadow-lg shadow-blue-900/20' 
+                      ? 'ring-2 ring-blue-600 shadow-lg shadow-blue-500/10 dark:shadow-blue-900/20' 
                       : isPremium 
-                        ? 'border border-purple-500/30 shadow-md hover:shadow-xl hover:shadow-purple-900/20 transition-all' 
-                        : 'border border-slate-800 shadow-sm hover:border-slate-700 transition-all'
+                        ? 'border border-purple-200 dark:border-purple-500/30 shadow-md hover:shadow-xl hover:shadow-purple-500/10 dark:hover:shadow-purple-900/20 transition-all' 
+                        : 'border border-zinc-200 dark:border-slate-800 shadow-sm hover:border-zinc-300 dark:hover:border-slate-700 transition-all'
                   }`}
                 >
                   {isPremium && (
@@ -89,23 +89,23 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ currentTie
                   )}
                   
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
+                    <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">{plan.name}</h3>
                     <div className="flex items-baseline gap-1 mt-2">
-                      <span className="text-3xl font-bold text-white">{plan.price}</span>
-                      <span className="text-slate-500">/month</span>
+                      <span className="text-3xl font-bold text-zinc-900 dark:text-white">{plan.price}</span>
+                      <span className="text-zinc-500">/month</span>
                     </div>
                   </div>
 
                   <ul className="space-y-4 mb-8 flex-1">
                     {plan.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-3 text-sm text-slate-300">
+                      <li key={idx} className="flex items-start gap-3 text-sm text-zinc-600 dark:text-slate-300">
                         <Check size={18} className="text-green-500 shrink-0 mt-0.5" />
                         <span>{feature}</span>
                       </li>
                     ))}
                     {plan.limitations.map((limitation, idx) => (
-                      <li key={`lim-${idx}`} className="flex items-start gap-3 text-sm text-slate-600">
-                        <X size={18} className="text-slate-700 shrink-0 mt-0.5" />
+                      <li key={`lim-${idx}`} className="flex items-start gap-3 text-sm text-zinc-400 dark:text-slate-600">
+                        <X size={18} className="text-zinc-300 dark:text-slate-700 shrink-0 mt-0.5" />
                         <span>{limitation}</span>
                       </li>
                     ))}

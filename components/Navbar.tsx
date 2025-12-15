@@ -13,25 +13,22 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, setView, onOpenS
   
   const getBadgeColor = (tier: SubscriptionTier) => {
     switch (tier) {
-      case 'PREMIUM': return 'bg-gradient-to-r from-amber-300 to-yellow-500 text-black border-amber-400 font-bold';
-      case 'PRO': return 'bg-slate-800 text-blue-400 border-slate-600';
-      default: return 'bg-slate-900 text-slate-400 border-slate-800';
+      case 'PREMIUM': return 'bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-500 dark:border-amber-500/20';
+      case 'PRO': return 'bg-indigo-100 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20';
+      default: return 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700';
     }
   };
 
   return (
-    <nav className="bg-slate-950/80 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
+    <nav className="bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-40 transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center cursor-pointer" onClick={() => user && setView(ViewState.DASHBOARD)}>
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg blur opacity-40 group-hover:opacity-75 transition duration-200"></div>
-              <div className="relative bg-slate-900 p-2 rounded-lg mr-3 border border-white/10">
-                <BrainCircuit className="text-blue-400 h-5 w-5" />
-              </div>
+        <div className="flex justify-between h-14">
+          <div className="flex items-center cursor-pointer gap-2" onClick={() => user && setView(ViewState.DASHBOARD)}>
+            <div className="bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded border border-zinc-200 dark:border-zinc-800">
+                <BrainCircuit className="text-indigo-600 dark:text-indigo-500 h-5 w-5" />
             </div>
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-              SynapseSync.AI
+            <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+              Synapse<span className="text-zinc-500 dark:text-zinc-500">Sync</span>
             </span>
           </div>
 
@@ -39,22 +36,24 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, setView, onOpenS
             <div className="flex items-center gap-4">
               <button 
                 onClick={onOpenSubscription}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs border transition-transform hover:scale-105 ${getBadgeColor(user.tier)}`}
+                className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium border uppercase tracking-wide transition-colors hover:bg-opacity-80 dark:hover:bg-opacity-20 ${getBadgeColor(user.tier)}`}
               >
-                {user.tier === 'PREMIUM' && <Crown size={12} fill="currentColor" />}
-                {user.tier}
+                {user.tier === 'PREMIUM' && <Crown size={10} fill="currentColor" />}
+                {user.tier} Plan
               </button>
 
-              <div className="hidden md:flex items-center gap-2 text-sm text-slate-400">
-                <UserCircle className="h-5 w-5" />
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1"></div>
+
+              <div className="hidden md:flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                <UserCircle className="h-4 w-4 text-zinc-500 dark:text-zinc-500" />
                 <span>{user.name}</span>
               </div>
               <button
                 onClick={onLogout}
-                className="p-2 text-slate-500 hover:text-red-400 hover:bg-white/5 rounded-full transition-all"
+                className="text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors"
                 title="Logout"
               >
-                <LogOut size={20} />
+                <LogOut size={18} />
               </button>
             </div>
           )}

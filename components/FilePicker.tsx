@@ -57,17 +57,17 @@ export const FilePicker: React.FC<FilePickerProps> = ({ onSelect, onCancel }) =>
 
   const getFileColor = (type: string) => {
     switch (type) {
-      case 'sheet': return 'bg-green-900/30 text-green-400';
-      case 'text': return 'bg-slate-800 text-slate-400';
-      default: return 'bg-blue-900/30 text-blue-400';
+      case 'sheet': return 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400';
+      case 'text': return 'bg-zinc-100 text-zinc-500 dark:bg-slate-800 dark:text-slate-400';
+      default: return 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400';
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border border-zinc-200 dark:border-white/10 transition-colors">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-slate-900">
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
               <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l18.25-32.6L18.6 11.35 2.1 40a8.55 8.55 0 0 0 0 8.35l4.5 18.5z" fill="#0066da"/>
@@ -77,21 +77,21 @@ export const FilePicker: React.FC<FilePickerProps> = ({ onSelect, onCancel }) =>
               <path d="M25.4 56.6 6.6 24.1C5.2 26.55 4.45 29.4 4.45 32.35v16c0 2.95.75 5.8 2.15 8.25l18.8-22.1z" fill="#2684fc"/>
               <path d="M57.8 7.3 36.65 44.2l-18.3-31.6 4.5-7.8C24.3 2.3 26.9.8 29.75.8h31c2.85 0 5.45 1.5 6.9 4l-9.85 2.5z" fill="#ffba00"/>
             </svg>
-            <h3 className="text-lg font-medium text-white">Select a file</h3>
+            <h3 className="text-lg font-medium text-zinc-900 dark:text-white">Select a file</h3>
           </div>
-          <button onClick={onCancel} className="text-slate-500 hover:text-white">
+          <button onClick={onCancel} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
             <X size={24} />
           </button>
         </div>
 
         {/* Toolbar */}
-        <div className="px-6 py-3 bg-slate-950/50 border-b border-white/10 flex items-center gap-4">
+        <div className="px-6 py-3 bg-zinc-50 dark:bg-slate-950/50 border-b border-zinc-200 dark:border-white/10 flex items-center gap-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input 
               type="text" 
               placeholder="Search in Drive..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-600"
+              className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-zinc-300 dark:border-slate-700 rounded-lg text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-zinc-400 dark:placeholder:text-slate-600"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -99,14 +99,16 @@ export const FilePicker: React.FC<FilePickerProps> = ({ onSelect, onCancel }) =>
         </div>
 
         {/* File List */}
-        <div className="flex-1 overflow-y-auto p-2 bg-slate-900 min-h-[300px]">
+        <div className="flex-1 overflow-y-auto p-2 bg-white dark:bg-slate-900 min-h-[300px]">
           <div className="space-y-1">
             {filteredFiles.map(file => (
               <div 
                 key={file.id}
                 onClick={() => setSelectedId(file.id)}
                 className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedId === file.id ? 'bg-blue-900/20 border border-blue-500/50' : 'hover:bg-slate-800 border border-transparent'
+                  selectedId === file.id 
+                  ? 'bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-500/50' 
+                  : 'hover:bg-zinc-100 dark:hover:bg-slate-800 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -114,21 +116,21 @@ export const FilePicker: React.FC<FilePickerProps> = ({ onSelect, onCancel }) =>
                     {getFileIcon(file.type)}
                   </div>
                   <div>
-                    <h4 className={`text-sm font-medium ${selectedId === file.id ? 'text-blue-400' : 'text-slate-200'}`}>
+                    <h4 className={`text-sm font-medium ${selectedId === file.id ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-900 dark:text-slate-200'}`}>
                       {file.name}
                     </h4>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-zinc-500 dark:text-slate-500">
                       Modified {file.updatedAt} • {file.owner}
                     </p>
                   </div>
                 </div>
                 {selectedId === file.id && (
-                  <Check size={20} className="text-blue-500" />
+                  <Check size={20} className="text-blue-600 dark:text-blue-500" />
                 )}
               </div>
             ))}
             {filteredFiles.length === 0 && (
-              <div className="text-center py-12 text-slate-600">
+              <div className="text-center py-12 text-zinc-400 dark:text-slate-600">
                 No files found
               </div>
             )}
@@ -136,10 +138,10 @@ export const FilePicker: React.FC<FilePickerProps> = ({ onSelect, onCancel }) =>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/10 bg-slate-950/50 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-slate-950/50 flex items-center justify-between">
            <div className="flex items-center gap-2">
-             <input type="checkbox" id="autosync" defaultChecked className="rounded text-blue-600 focus:ring-blue-500 bg-slate-800 border-slate-600" />
-             <label htmlFor="autosync" className="text-sm text-slate-400">Enable auto-sync & history</label>
+             <input type="checkbox" id="autosync" defaultChecked className="rounded text-blue-600 focus:ring-blue-500 bg-white dark:bg-slate-800 border-zinc-300 dark:border-slate-600" />
+             <label htmlFor="autosync" className="text-sm text-zinc-600 dark:text-slate-400">Enable auto-sync & history</label>
            </div>
            <div className="flex gap-3">
              <Button variant="ghost" onClick={onCancel} disabled={isProcessing}>Cancel</Button>
