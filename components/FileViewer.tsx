@@ -3,6 +3,8 @@ import { DocFile, ChatMessage, User } from '../types';
 import { ArrowLeft, Clock, Save, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType, Lock, ToggleLeft, ToggleRight, BrainCircuit, Type, Minus, Plus, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
 import { generateChatResponse } from '../services/geminiService';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface FileViewerProps {
   file: DocFile;
@@ -57,7 +59,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
     setMessages([{
       id: 'welcome',
       role: 'model',
-      text: `Hello! I've read "${file.title}". I am ready to assist you.`,
+      text: `Hello! I've read "**${file.title}**". I am ready to assist you.`,
       timestamp: new Date()
     }]);
   }, [file]);
@@ -303,13 +305,35 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[90%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
+                      <div className={`max-w-[90%] rounded-lg px-3 py-2 text-sm leading-relaxed overflow-hidden ${
                         msg.role === 'user' 
                           ? 'bg-indigo-600 text-white' 
                           : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
                       }`}>
-                        {msg.role === 'model' && <Bot size={14} className="mb-1 text-indigo-500 dark:text-indigo-400 inline-block mr-2" />}
-                        {msg.text}
+                        {msg.role === 'model' && <Bot size={14} className="mb-1 text-indigo-500 dark:text-indigo-400 inline-block mr-2 align-middle" />}
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          className={`inline-block align-top prose prose-sm max-w-none ${
+                            msg.role === 'user' 
+                              ? 'prose-invert text-white' // User bubble is dark (indigo), so force invert to make text light
+                              : 'dark:prose-invert' // Model bubble adapts to theme
+                          }`}
+                          components={{
+                            p: ({node, ...props}) => <p className="mb-1 last:mb-0" {...props} />,
+                            a: ({node, ...props}) => <a className="text-blue-500 hover:underline" {...props} />,
+                            code: ({node, className, ...props}) => {
+                                // @ts-ignore
+                                const inline = props.inline || !String(props.children).includes('\n');
+                                return inline ? (
+                                    <code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded font-mono text-xs" {...props} />
+                                ) : (
+                                    <code className="block bg-black/10 dark:bg-white/10 p-2 rounded font-mono text-xs my-1 overflow-x-auto" {...props} />
+                                );
+                            }
+                          }}
+                        >
+                          {msg.text}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   ))}
