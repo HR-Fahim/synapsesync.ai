@@ -666,10 +666,13 @@ export function App() {
                    <Logo className="w-6 h-6" />
                </div>
                <h1 className="text-4xl font-bold text-zinc-900 dark:text-white mb-6 leading-tight tracking-tight font-lato">
-                   Synapse<span className="text-zinc-400 dark:text-zinc-500">Sync</span> Enterprise
+                   Synapse<span className="text-zinc-400 dark:text-zinc-500">Sync</span>
                </h1>
-               <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-10 leading-relaxed font-light">
+               <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-6 leading-relaxed font-light">
                    Ensure your personal notes and company documents stay up-to-date effortlessly with AI-powered monitoring.
+               </p>
+               <p className="text-sm text-zinc-500 dark:text-zinc-500 mb-10 font-medium uppercase tracking-wide">
+                   Powered by AutoSynapse Systems
                </p>
                
                <div className="space-y-6">

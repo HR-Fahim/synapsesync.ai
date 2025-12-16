@@ -44,7 +44,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onSuccess, onCancel }) =
         </div>
         
         <h2 className="text-2xl font-medium text-zinc-900 dark:text-white mb-2">Sign in with Google</h2>
-        <p className="text-zinc-600 dark:text-slate-400 mb-8">Choose an account to continue to <span className="font-semibold text-zinc-700 dark:text-slate-200">DocuMind</span></p>
+        <p className="text-zinc-600 dark:text-slate-400 mb-8">Choose an account to continue to <span className="font-semibold text-zinc-700 dark:text-slate-200">SynapseSync</span></p>
 
         <div 
           onClick={handleSignIn}
@@ -76,7 +76,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onSuccess, onCancel }) =
         </div>
         
         <div className="mt-8 text-xs text-zinc-400 dark:text-slate-600">
-          To continue, Google will share your name, email address, and language preference with DocuMind.
+          To continue, Google will share your name, email address, and language preference with SynapseSync.
         </div>
       </div>
     </div>

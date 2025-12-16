@@ -1,5 +1,5 @@
 {
-  "name": "synapsesync.ai",
+  "name": "synapsesync",
   "description": "A Google Docs/Sheets integrated management platform with AI-powered chat, version control, and restoration capabilities.",
   "requestFramePermissions": []
 }
