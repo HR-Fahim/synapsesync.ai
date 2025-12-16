@@ -1,6 +1,7 @@
 import React from 'react';
-import { LogOut, BrainCircuit, UserCircle, Crown } from 'lucide-react';
+import { LogOut, UserCircle, Crown } from 'lucide-react';
 import { User, ViewState, SubscriptionTier } from '../types';
+import { Logo } from './Logo';
 
 interface NavbarProps {
   user: User | null;
@@ -25,7 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, setView, onOpenS
         <div className="flex justify-between h-14">
           <div className="flex items-center cursor-pointer gap-2" onClick={() => user && setView(ViewState.DASHBOARD)}>
             <div className="bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded border border-zinc-200 dark:border-zinc-800">
-                <BrainCircuit className="text-indigo-600 dark:text-indigo-500 h-5 w-5" />
+                <Logo className="w-5 h-5" />
             </div>
             <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               Synapse<span className="text-zinc-500 dark:text-zinc-500">Sync</span>

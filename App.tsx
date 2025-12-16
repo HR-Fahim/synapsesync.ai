@@ -7,8 +7,9 @@ import { GoogleAuth } from './components/GoogleAuth';
 import { FilePicker } from './components/FilePicker';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { EmailVerification } from './components/EmailVerification';
+import { Logo } from './components/Logo';
 import { User, DocFile, ViewState, FileVersion, SubscriptionTier } from './types';
-import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, BrainCircuit, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check, Loader2, Cloud, ChevronRight } from 'lucide-react';
+import { FileText, FileSpreadsheet, Plus, Lock, Mail, Upload, FileType, RefreshCw, Trash2, ArrowLeft, Sparkles, Clock, ShieldCheck, Check, Loader2, Cloud, ChevronRight } from 'lucide-react';
 import { auth } from './services/firebase';
 import { StorageService } from './services/storage';
 
@@ -565,12 +566,18 @@ export function App() {
     const updatedFile = { ...file, autoUpdateEnabled: newState };
 
     setFiles(prevFiles => prevFiles.map(f => f.id === fileId ? updatedFile : f));
-    showNotification(`AI Auto-Update ${newState ? 'Enabled' : 'Disabled'}`);
+    showNotification(`Keep Up-to-Date ${newState ? 'Enabled' : 'Disabled'}`);
 
     setIsSyncing(true);
-    StorageService.uploadFile(user.id, updatedFile)
-      .catch(() => {})
-      .finally(() => setIsSyncing(false));
+    
+    // Use lightweight metadata update instead of full upload
+    try {
+        await StorageService.updateFileMetadata(user.id, file.id, { autoUpdateEnabled: newState });
+    } catch (error) {
+        console.error("Failed to sync auto-update toggle", error);
+    } finally {
+        setIsSyncing(false);
+    }
   };
 
   const handleUpgrade = async (tier: SubscriptionTier) => {
@@ -656,13 +663,13 @@ export function App() {
            
            <div className="relative z-10 max-w-lg">
                <div className="w-12 h-12 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg flex items-center justify-center mb-8 shadow-xl">
-                   <BrainCircuit className="text-indigo-600 dark:text-indigo-500 w-6 h-6" />
+                   <Logo className="w-6 h-6" />
                </div>
                <h1 className="text-4xl font-bold text-zinc-900 dark:text-white mb-6 leading-tight tracking-tight font-lato">
                    Synapse<span className="text-zinc-400 dark:text-zinc-500">Sync</span> Enterprise
                </h1>
                <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-10 leading-relaxed font-light">
-                   The next generation of document intelligence. Secure, versioned, and AI-enhanced workflow management.
+                   Ensure your personal notes and company documents stay up-to-date effortlessly with AI-powered monitoring.
                </p>
                
                <div className="space-y-6">
@@ -902,7 +909,7 @@ export function App() {
               
               {/* Loop Interval Display/Selector */}
               <div className="mt-4 inline-flex items-center gap-2">
-                <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-500 uppercase tracking-widest">Auto-Update Cycle</span>
+                <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-500 uppercase tracking-widest">AI Update Cycle</span>
                 <div className="h-px w-8 bg-zinc-300 dark:bg-zinc-800"></div>
                 
                 {user.tier === 'FREE' ? (
@@ -1014,13 +1021,13 @@ export function App() {
                     </div>
                   </div>
                   
-                  <div className="px-4 py-2 border-t border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-500 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-md">
-                     <span className="flex items-center gap-1.5">
-                       <Lock size={10} /> ENCRYPTED
+                  <div className="px-4 py-2 border-t border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between gap-2 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-b-md">
+                     <span className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-500 shrink-0">
+                       <Lock size={10} /> <span className="hidden sm:inline">ENCRYPTED</span>
                      </span>
                      {file.autoUpdateEnabled && (
-                        <span className="text-emerald-600 dark:text-emerald-500 font-bold flex items-center gap-1">
-                          AI ACTIVE <RefreshCw size={10} />
+                        <span className="text-emerald-600 dark:text-emerald-500 font-bold flex items-center justify-end gap-1.5 text-[9px] uppercase tracking-wide whitespace-nowrap">
+                          AI ACTIVE <RefreshCw size={10} className="shrink-0" />
                         </span>
                      )}
                   </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DocFile, ChatMessage, User } from '../types';
-import { ArrowLeft, Clock, Save, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType, Lock, ToggleLeft, ToggleRight, BrainCircuit, Type, Minus, Plus, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Clock, Save, Send, Sparkles, FileSpreadsheet, FileText, Bot, Edit2, X, Undo, FileType, Lock, Type, Minus, Plus } from 'lucide-react';
 import { Button } from './Button';
 import { generateChatResponse } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
@@ -166,16 +166,29 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
              {/* Toolbar Actions */}
              {!isHistoricalView && !isEditing && (
                <>
-                 <div className="hidden sm:flex items-center gap-3 pr-3 border-r border-zinc-200 dark:border-zinc-800 mr-1">
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] text-zinc-500 dark:text-zinc-500 uppercase tracking-widest font-bold">AI Auto-Save</span>
-                      <button 
-                        onClick={() => onToggleAutoUpdate(file.id)}
-                        className={`text-xs font-semibold flex items-center gap-1.5 transition-colors ${file.autoUpdateEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500'}`}
-                      >
-                         {file.autoUpdateEnabled ? 'On' : 'Off'}
-                         {file.autoUpdateEnabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                      </button>
+                 <div className="hidden sm:flex items-center gap-3 border-r border-zinc-200 dark:border-zinc-800 pr-4 mr-2">
+                    <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/60 px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700/50">
+                        <label 
+                          onClick={() => onToggleAutoUpdate(file.id)}
+                          className="text-[10px] font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-400 cursor-pointer select-none"
+                        >
+                          Keep Up-to-Date
+                        </label>
+                        <button 
+                          onClick={() => onToggleAutoUpdate(file.id)}
+                          className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 dark:focus:ring-offset-zinc-950 ${
+                            file.autoUpdateEnabled ? 'bg-indigo-600' : 'bg-zinc-300 dark:bg-zinc-600'
+                          }`}
+                          role="switch"
+                          aria-checked={file.autoUpdateEnabled}
+                        >
+                           <span 
+                             aria-hidden="true" 
+                             className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                               file.autoUpdateEnabled ? 'translate-x-3' : 'translate-x-0'
+                             }`}
+                           />
+                        </button>
                     </div>
                  </div>
 
@@ -440,4 +453,4 @@ export const FileViewer: React.FC<FileViewerProps> = ({ file, user, onBack, onRe
       )}
     </div>
   );
-};
+}

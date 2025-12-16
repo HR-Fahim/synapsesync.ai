@@ -56,6 +56,33 @@ export const StorageService = {
 
   // --- Document Management (Cloud First) ---
 
+  async updateFileMetadata(userId: string, fileId: string, updates: Partial<DocFile>): Promise<void> {
+    // 1. Local Cache Update
+    try {
+      const localFilesKey = getLocalFilesKey(userId);
+      const currentLocal = localStorage.getItem(localFilesKey);
+      if (currentLocal) {
+        const filesArray: DocFile[] = JSON.parse(currentLocal);
+        const idx = filesArray.findIndex(f => f.id === fileId);
+        if (idx >= 0) {
+            filesArray[idx] = { ...filesArray[idx], ...updates };
+            localStorage.setItem(localFilesKey, JSON.stringify(filesArray));
+        }
+      }
+    } catch (e) { console.warn("Cache metadata update failed", e); }
+
+    if (!navigator.onLine) return;
+
+    // 2. Firestore Update
+    try {
+      await db.collection('users').doc(userId).collection('files').doc(fileId).set(updates, { merge: true });
+      console.log(`Updated metadata for file ${fileId}`);
+    } catch (error) {
+      console.error("Firestore metadata update failed:", error);
+      throw error;
+    }
+  },
+
   async uploadFile(userId: string, file: DocFile): Promise<void> {
     // 1. Optimistic Cache Update
     try {
@@ -110,6 +137,7 @@ export const StorageService = {
         id: v.id,
         timestamp: v.timestamp,
         versionLabel: v.versionLabel,
+        content: v.content // Ensure content is saved in Firestore history
       }));
 
       // Extract metadata but KEEP currentContent for Firestore backup
@@ -180,14 +208,14 @@ export const StorageService = {
                             id: v.id, 
                             timestamp: v.timestamp, 
                             versionLabel: v.versionLabel, 
-                            content: '' 
+                            content: '' // Keep empty for list view optimization, load full content on select
                           })) 
                         : [];
 
                     return {
                         ...data,
                         id: doc.id,
-                        // IMPORTANT: Force content empty for list view
+                        // IMPORTANT: Force content empty for list view to save memory/render time
                         currentContent: '', 
                         versions: reconstructedVersions,
                         _isLite: true 
@@ -247,7 +275,7 @@ export const StorageService = {
                              id: v.id,
                              timestamp: v.timestamp,
                              versionLabel: v.versionLabel,
-                             content: '' // History content not available in fallback
+                             content: v.content || '' // Load content from Firestore if available
                          }));
 
                          return {
